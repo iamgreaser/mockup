@@ -1,0 +1,32 @@
+# hello_003: Parse number variables and print them.
+
+{
+  print(1);
+  var v: i32 = 123;
+  print((v*100)+45);
+}
+
+{
+  print(2);
+  var v: i32 = 123;
+  v = v + 1;
+  print((v*100)+45);
+  v = v + 1;
+  print((v*100)+45);
+}
+
+print(3);
+const v: i32 = 321;
+print((v*100)+45);
+
+{
+  print(4);
+  var v: i32 = 555;
+  v = v + 1;
+  print((v*100)+45);
+  v = v + 1;
+  print((v*100)+45);
+}
+
+print(5);
+print((v*100)+45);

@@ -106,8 +106,8 @@ class ParseLiteral < ParseGenNode
 
   def on_parse(lexer)
     token = lexer.next_token()
-    raise "unexpected EOF, expected `#{@terminal}`" unless token
-    token.raise_error("unexpected token `#{token.literal}`, expected `#{@terminal}`") unless token
+    raise "unexpected EOF, expected `#{@literal}`" unless token
+    token.raise_error("unexpected token `#{token.literal}`, expected `#{@literal}`") unless token.literal == @literal
     return {type: :literal, literal: @literal}
   end
 

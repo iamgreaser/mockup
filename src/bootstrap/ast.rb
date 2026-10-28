@@ -8,17 +8,37 @@ $parser_specs = {
     p_ref(:nothing_stat),
     p_ref(:expr_stat),
     p_ref(:block_stat),
+    p_ref(:const_stat),
+    p_ref(:var_stat),
     p_ref(:if_stat),
   ], [
     :nothing,
     :expr,
     :block,
+    :const,
+    :var,
     :if,
   ]),
 
   nothing_stat: p_literal(";"),
-  expr_stat: p_sequence([p_ref(:expr), p_literal(";")], [:expr, nil]),
+  expr_stat: p_sequence([p_ref(:expr),
+    p_optional(p_sequence([p_literal("="), p_ref(:expr)], [nil, :SPECIAL_full_body])),
+    p_literal(";")], [:expr, :assign, nil]),
   block_stat: p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :stats, nil]),
+  const_stat: p_sequence([
+    p_literal("const"), p_terminal(:name),
+    p_optional(p_sequence([p_literal(":"), p_ref(:expr)], [nil, :SPECIAL_full_body])),
+    p_literal("="),
+    p_ref(:expr),
+    p_literal(";"),
+  ], [nil, :name, :value_type, nil, :value, nil]),
+  var_stat: p_sequence([
+    p_literal("var"), p_terminal(:name),
+    p_optional(p_sequence([p_literal(":"), p_ref(:expr)], [nil, :SPECIAL_full_body])),
+    p_literal("="),
+    p_ref(:expr),
+    p_literal(";"),
+  ], [nil, :name, :value_type, nil, :value, nil]),
   if_stat: p_sequence([
     p_literal("if"), p_ref(:expr), p_literal("{"),
     p_ref(:stat_list),
@@ -79,15 +99,25 @@ class AST
     p ["x", self]
     raise "TODO: Implement me in a concrete class!"
   end
+
+  def evaluate_assignment(ctx, value)
+    p ["x=", self]
+    raise "TODO: Implement me in a concrete class!"
+  end
 end
 
 class NameAST < AST
+  attr_reader :n
   def initialize(name)
     @n = name
   end
 
   def evaluate(ctx)
     ctx[@n]
+  end
+
+  def evaluate_assignment(ctx, value)
+    ctx[@n] = value
   end
 end
 
@@ -128,6 +158,35 @@ class StatListAST < AST
   end
 end
 
+class BlockStatAST < AST
+  def initialize(stat_list)
+    @stat_list = stat_list
+  end
+
+  def evaluate(ctx)
+    ctx.push_new_scope()
+    begin
+      @stat_list.evaluate(ctx)
+    ensure
+      ctx.pop_scope()
+    end
+  end
+end
+
+class VarStatAST < AST
+  def initialize(is_mutable, name, value_type, value)
+    @is_mutable = is_mutable
+    @name = name
+    @value_type = value_type
+    @value = value
+  end
+
+  def evaluate(ctx)
+    # TODO: Handle types!
+    ctx.define(@is_mutable, @name.n, @value.evaluate(ctx))
+  end
+end
+
 class ExprStatAST < AST
   def initialize(e)
     @e = e
@@ -135,6 +194,17 @@ class ExprStatAST < AST
 
   def evaluate(ctx)
     @e.evaluate(ctx)
+  end
+end
+
+class AssignExprStatAST < AST
+  def initialize(target, e)
+    @target = target
+    @e = e
+  end
+
+  def evaluate(ctx)
+    @target.evaluate_assignment(ctx, @e.evaluate(ctx))
   end
 end
 
@@ -201,7 +271,17 @@ $parser_to_ast = {
 
   stat_list: proc {|n| StatListAST.new(n[:v])},
   stat: proc {|n| n[:v]},
-  expr_stat: proc {|n| ExprStatAST.new(n[:v][:expr])},
+  block_stat: proc {|n| BlockStatAST.new(n[:v][:stats])},
+  const_stat: proc {|n| VarStatAST.new(false, n[:v][:name], n[:v][:value_type], n[:v][:value])},
+  var_stat: proc {|n| VarStatAST.new(true, n[:v][:name], n[:v][:value_type], n[:v][:value])},
+  expr_stat: proc {|n|
+    n = n[:v]
+    if n[:assign] then
+      AssignExprStatAST.new(n[:expr], n[:assign])
+    else
+      ExprStatAST.new(n[:expr])
+    end
+  },
 
   expr: proc {|n|
     n = n[:v]
