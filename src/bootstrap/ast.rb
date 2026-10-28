@@ -27,12 +27,36 @@ $parser_specs = {
     ),
   ], [nil, :test, nil, :true_block, nil, :false_block]),
 
-  expr: p_sequence([p_ref(:expr_terminal), p_ref(:expr_suffixes)], [:e, :suffixes]),
+  expr: p_sequence([p_ref(:suffixed_expr), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
+  suffixed_expr: p_sequence([p_ref(:expr_terminal), p_ref(:expr_suffixes)], [:e, :suffixes]),
   expr_suffixes: p_zero_plus(p_select([
     p_ref(:expr_suffix_func_call),
   ], [:func_call])),
   expr_suffix_func_call: p_sequence([p_literal("("), p_ref(:arg_list), p_literal(")")], [nil, :args, nil]),
-  expr_terminal: p_select([p_ref(:int_expr), p_ref(:name_expr)], [:int, :name]),
+  expr_terminal: p_select([
+    p_ref(:int_expr),
+    p_ref(:name_expr),
+    p_sequence([p_literal("("), p_ref(:expr), p_literal(")")], [nil, :SPECIAL_full_body, nil]),
+  ], [:int, :name, :expr]),
+
+  binop_suffix: p_select([
+    p_ref(:binop_chain_add),
+    p_ref(:binop_chain_sub),
+    p_ref(:binop_chain_mul),
+    p_ref(:binop_chain_div),
+    p_ref(:binop_chain_mod),
+  ], [
+    :add,
+    :sub,
+    :mul,
+    :div,
+    :mod,
+  ]),
+  binop_chain_add: p_one_plus(p_sequence([p_literal("+"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
+  binop_chain_sub: p_sequence([p_literal("-"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_mul: p_one_plus(p_sequence([p_literal("*"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
+  binop_chain_div: p_sequence([p_literal("/"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_mod: p_sequence([p_literal("%"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
 
   arg_list: p_optional(p_sequence([p_ref(:expr), p_optional(p_ref(:opt_next_arg))], [:SPECIAL_head, :SPECIAL_tail])),
   opt_next_arg: p_sequence([p_literal(","), p_ref(:arg_list)], [nil, :SPECIAL_full_body]),
@@ -125,6 +149,41 @@ class FuncCallAST < AST
   end
 end
 
+module BinOp
+  Add = "+"
+  Sub = "-"
+  Mul = "*"
+  Div = "/"
+  Mod = "%"
+end
+
+class BinOpAST < AST
+  def initialize(op, e1, e2)
+    @op = op
+    @e1 = e1
+    @e2 = e2
+  end
+
+  def evaluate(ctx)
+    e1 = @e1.evaluate(ctx)
+    e2 = @e2.evaluate(ctx)
+    case @op
+    in BinOp::Add
+      e1 + e2
+    in BinOp::Sub
+      e1 - e2
+    in BinOp::Mul
+      e1 * e2
+    in BinOp::Div
+      e1 / e2
+    in BinOp::Mod
+      e1 % e2
+    else
+      raise "TODO implement binop `#{@op}`"
+    end
+  end
+end
+
 $parser_to_ast = {
   literal: proc {|n| LiteralAST.new(n[:literal]) },
 
@@ -147,6 +206,31 @@ $parser_to_ast = {
   expr: proc {|n|
     n = n[:v]
     result = n[:e]
+    if n[:binop_suffix] then
+      begin
+        f = $ast_apply_binop[n[:binop_suffix][:type]]
+      rescue
+        p ["binop", n[:binop_suffix]]
+        raise
+      end
+      result = f.call(result, n[:binop_suffix][:v])
+    end
+    result
+  },
+
+  # Binop stuff
+  binop_suffix: proc {|n| n[:v]},
+  # Leave these intact until we mess with them in a later pass
+  binop_chain_add: proc {|n| n},
+  binop_chain_sub: proc {|n| n},
+  binop_chain_mul: proc {|n| n},
+  binop_chain_div: proc {|n| n},
+  binop_chain_mod: proc {|n| n},
+
+  # Suffixed expression stuff
+  suffixed_expr: proc {|n|
+    n = n[:v]
+    result = n[:e]
     n[:suffixes].each {|suffix|
       #p ["suf-----", result, suffix[:type], suffix]
       result = $ast_apply_suffix[suffix[:type]].call(result, suffix[:v])
@@ -154,7 +238,7 @@ $parser_to_ast = {
     }
     result
   },
-  # Leave these intact until we mess with them
+  # Leave these intact until we mess with them in a later pass
   expr_suffix_func_call: proc {|n| n},
 
 }
@@ -166,6 +250,23 @@ $terminal_to_ast = {
 
 $ast_apply_suffix = {
   expr_suffix_func_call: proc {|e, n| FuncCallAST.new(e, n[:args]) },
+}
+
+$ast_apply_binop = {
+  # Associative operations -- (A $ B) $ C = A $ (B $ C)
+  binop_chain_add: proc {|e1, n|
+    n.each {|e2| e1 = BinOpAST.new(BinOp::Add, e1, e2) }
+    e1
+  },
+  binop_chain_mul: proc {|e1, n|
+    n.each {|e2| e1 = BinOpAST.new(BinOp::Mul, e1, e2) }
+    e1
+  },
+
+  # Non-associative operations -- (A $ B) $ C might not be A $ (B $ C)
+  binop_chain_sub: proc {|e1, e2| BinOpAST.new(BinOp::Sub, e1, e2)},
+  binop_chain_div: proc {|e1, e2| BinOpAST.new(BinOp::Div, e1, e2)},
+  binop_chain_mod: proc {|e1, e2| BinOpAST.new(BinOp::Mod, e1, e2)},
 }
 
 ##############################

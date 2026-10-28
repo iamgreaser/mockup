@@ -7,9 +7,13 @@ def postparse(result)
   return result if result.kind_of?(AST)
   return result if result.kind_of?(Array)
   return result unless result.include?(:type)
-  #p ["type", result]
-  #p ["type", result[:type], result]
-  result = $parser_to_ast[result[:type]].call(result)
+  begin
+    result = $parser_to_ast[result[:type]].call(result)
+  rescue
+    #p ["type", result]
+    p ["type", result[:type], result]
+    raise
+  end
   result
 end
 
@@ -76,8 +80,14 @@ class ParseRef < ParseGenNode
   end
 
   def immediate_starts()
-    #p ["name", @name, $parser_specs[@name]]
-    $parser_specs[@name].starts()
+    begin
+      spec = $parser_specs[@name]
+      raise "could not find spec for #{@name}" if spec == nil
+    rescue
+      p ["name", @name, spec]
+      raise
+    end
+    spec.starts()
   end
   def immediate_has_epsilon()
     $parser_specs[@name].has_epsilon()
@@ -170,6 +180,45 @@ class ParseZeroPlus < ParseGenNode
 end
 def p_zero_plus(node)
   ParseZeroPlus.new(node)
+end
+
+class ParseOnePlus < ParseGenNode
+  attr_reader :node
+  def initialize(node)
+    super()
+    @node = node
+  end
+
+  def on_parse(lexer)
+    result = []
+    while true do
+      token = lexer.next_token()
+      unless token
+        token.raise_error("unexpected EOF") if result.empty?
+        break
+      end
+      literal = token.literal
+      tclass = token.token_class()
+      unless self.starts().member?(tclass)
+        token.raise_error("unexpected EOF") if result.empty?
+        lexer.push_back_token(token)
+        break
+      end
+      lexer.push_back_token(token)
+      result.push @node.parse(lexer)
+    end
+    result
+  end
+
+  def immediate_starts()
+    @node.starts()
+  end
+  def immediate_has_epsilon()
+    false
+  end
+end
+def p_one_plus(node)
+  ParseOnePlus.new(node)
 end
 
 class ParseOptional < ParseGenNode

@@ -1,0 +1,14 @@
+# hello_002: Parse constant number expressions and print them.
+
+print(1+4);
+print(2*3);
+print(4-5);
+print(7/3);
+print(7%3);
+
+print(1+2+3);
+print(1*2*3);
+print(5-2);
+print(5/2);
+print(5%2);
+print((3*3)+(4*4));
