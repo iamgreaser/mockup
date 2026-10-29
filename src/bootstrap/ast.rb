@@ -56,8 +56,9 @@ $parser_specs = {
   expr_terminal: p_select([
     p_ref(:int_expr),
     p_ref(:name_expr),
+    p_ref(:string_expr),
     p_sequence([p_literal("("), p_ref(:expr), p_literal(")")], [nil, :SPECIAL_full_body, nil]),
-  ], [:int, :name, :expr]),
+  ], [:int, :name, :string, :expr]),
 
   binop_suffix: p_select([
     p_ref(:binop_chain_add),
@@ -83,6 +84,7 @@ $parser_specs = {
 
   int_expr: p_terminal(:int),
   name_expr: p_terminal(:name),
+  string_expr: p_terminal(:string),
 }
 
 $parser_specs.each{|name, pg|
@@ -139,6 +141,74 @@ class IntAST < AST
     else
       @v = literal.to_i(10)
     end
+  end
+
+  def evaluate(ctx)
+    @v
+  end
+end
+
+class StringAST < AST
+  def initialize(literal)
+    @literal = literal
+    raise "BUG: string literal must start with `\"`" unless @literal[0] == "\""
+    raise "BUG: string literal must end with `\"`" unless @literal.length >= 2 and @literal[-1] == "\""
+    input_slice = @literal[1...@literal.length-1]
+    accum = ""
+    offs = 0
+    loop do
+      m = /^[^"\\]*/.match(input_slice[offs..])[0]
+      accum += m
+      offs += m.length
+      break if offs == input_slice.length
+      c = /^./.match(input_slice[offs..])
+      #p [">>", offs, input_slice.length]
+      raise "BUG: end of token reached in string literal? got EOF" unless c
+      raise "BUG: end of token reached in string literal? got `#{c[0]}`" unless c and c[0].length == 1
+      c = c[0]
+      offs += c.length
+      if c == "\"" then
+        raise "BUG: unescaped `\"` in string literal"
+      elsif c == "\\" then
+        c = /^./.match(input_slice[offs..])
+        raise "BUG: end of token reached in string literal? got EOF" unless c
+        raise "BUG: end of token reached in string literal? got `#{c[0]}`" unless c and c[0].length == 1
+        c = c[0]
+        offs += c.length
+        case c
+        in "n"
+          accum += "\n"
+        in "r"
+          accum += "\r"
+        in "t"
+          accum += "\t"
+        in "\\"
+          accum += "\\"
+        in "\""
+          accum += "\""
+        in "x"
+          # Hexadecimal 2-digit byte
+          m = /^[0-9A-Fa-f]{2}/.match(input_slice[offs..])
+          raise "BUG: expected 2 hex digits after `\\x`" unless m
+          m = m[0]
+          offs += m.length
+          accum += m.to_i(16).chr
+        in "u"
+          # Hexadecimal braced Unicode character \u{...}
+          m = /^\{([0-9A-Fa-f]+)\}/.match(input_slice[offs..])
+          raise "BUG: expected hex digits in {braces} after `\\u`" unless m
+          offs += m[0].length
+          accum += m[1].to_i(16).chr(Encoding::UTF_8)
+        else
+          raise "BUG: invalid string escape `\\#{c}`"
+        end
+
+      else
+        raise "BUG, case not handled!"
+      end
+    end
+    #p ["lit", @literal, accum, accum.length]
+    @v = accum
   end
 
   def evaluate(ctx)
@@ -263,6 +333,7 @@ $parser_to_ast = {
 
   name_expr: proc {|n| n[:v]},
   int_expr: proc {|n| n[:v]},
+  string_expr: proc {|n| n[:v]},
   expr_terminal: proc {|n| n[:v]},
   expr_suffixes: proc {|n| n[:v]},
 
@@ -326,6 +397,7 @@ $parser_to_ast = {
 $terminal_to_ast = {
   int: proc {|literal| IntAST.new(literal) },
   name: proc {|literal| NameAST.new(literal) },
+  string: proc {|literal| StringAST.new(literal) },
 }
 
 $ast_apply_suffix = {

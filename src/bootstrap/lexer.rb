@@ -109,6 +109,44 @@ class Lexer
         return Token.new(pos, c + next_match(/^[0-9]*/))
       end
 
+    elsif c == "\"" then
+      accum = c
+      loop do
+        m = next_match(/^[^"\\]*/)
+        accum += m
+        c = next_char()
+        pos.raise_error("unterminated string literal") unless c
+        accum += c
+        if c == "\"" then
+          break
+        elsif c == "\\" then
+          c = next_char()
+          pos.raise_error("unterminated string literal") unless c
+          accum += c
+          if c =~ /^[nrt"\\]$/ then
+            # Take as-is
+          elsif c == "x" then
+            # Hexadecimal 2-digit byte
+            m = next_match(/^[0-9A-Fa-f]{2}/)
+            get_token_pos().raise_error("expected 2 hex digits after `\\x`") unless m
+            accum += m
+          elsif c == "u" then
+            # Hexadecimal braced Unicode character \u{...}
+            m = next_match(/^\{[0-9A-Fa-f]+\}/)
+            get_token_pos().raise_error("expected hex digits in {braces} after `\\u`") unless m
+            accum += m
+          else
+            push_back_char()
+            get_token_pos().raise_error("invalid string escape `\\#{c}`")
+          end
+
+        else
+          push_back_char()
+          get_token_pos().raise_error("BUG, case not handled!")
+        end
+      end
+      return Token.new(pos, accum)
+
     else
       return Token.new(pos, c)
     end
@@ -165,6 +203,10 @@ class TokenPos
     @line = line
     @col = col
   end
+
+  def raise_error(msg)
+    raise "#{@fname}:#{@line}:#{@col}: #{msg}"
+  end
 end
 
 ##############################
@@ -185,13 +227,18 @@ class Token
     @literal[0] =~ /^[0-9]/
   end
 
+  def is_string()
+    @literal[0] == "\""
+  end
+
   def token_class()
+    return :string if self.is_string()
     return :name if self.is_name()
     return :int if self.is_int()
     @literal
   end
 
   def raise_error(msg)
-    raise "#{@pos.fname}:#{@pos.line}:#{@pos.col}: #{msg}"
+    @pos.raise_error(msg)
   end
 end

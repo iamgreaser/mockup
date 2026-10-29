@@ -1,0 +1,10 @@
+# hello_004: Parse strings and numbers and print them.
+
+print("Hello, World!");
+print(5);
+print("Exclamation marks\x21\x20And more\x3F");
+print("a \u{2208} A");
+print("(\u{1F4A9})");
+print("Also,\u{20}space");
+print("A直すB");
+
