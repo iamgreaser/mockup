@@ -133,14 +133,15 @@ class IntAST < AST
   def initialize(literal)
     @literal = literal
     if literal =~ /^0[bB]/
-      @v = literal[2..].to_i(2)
+      v = literal[2..].to_i(2)
     elsif literal =~ /^0[oO]/
-      @v = literal[2..].to_i(8)
+      v = literal[2..].to_i(8)
     elsif literal =~ /^0[xX]/
-      @v = literal[2..].to_i(16)
+      v = literal[2..].to_i(16)
     else
-      @v = literal.to_i(10)
+      v = literal.to_i(10)
     end
+    @v = VInt.new(32, true, v)
   end
 
   def evaluate(ctx)
@@ -208,7 +209,7 @@ class StringAST < AST
       end
     end
     #p ["lit", @literal, accum, accum.length]
-    @v = accum
+    @v = VString.new(accum)
   end
 
   def evaluate(ctx)
@@ -307,20 +308,7 @@ class BinOpAST < AST
   def evaluate(ctx)
     e1 = @e1.evaluate(ctx)
     e2 = @e2.evaluate(ctx)
-    case @op
-    in BinOp::Add
-      e1 + e2
-    in BinOp::Sub
-      e1 - e2
-    in BinOp::Mul
-      e1 * e2
-    in BinOp::Div
-      e1 / e2
-    in BinOp::Mod
-      e1 % e2
-    else
-      raise "TODO implement binop `#{@op}`"
-    end
+    e1.evaluate_binop(@op, e2)
   end
 end
 
