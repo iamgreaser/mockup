@@ -132,6 +132,7 @@ end
 class VInt < ValueBase
   attr_reader :type, :value
   def initialize(type, value)
+    raise "mismatched host type #{value.class.name}" unless value.kind_of?(Integer)
     @type = type
     @value = value
     @type.assert_in_range(value)
@@ -181,6 +182,7 @@ class VString < ValueBase
   # TODO: Make this a wrapper around []u8
   attr_reader :rstring
   def initialize(rstring)
+    raise "mismatched host type #{rstring.class.name}" unless rstring.kind_of?(String)
     @rstring = rstring
   end
 

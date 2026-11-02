@@ -209,7 +209,7 @@ class StringAST < AST
       end
     end
     #p ["lit", @literal, accum, accum.length]
-    @v = VString.new(accum)
+    @v = VTString.new().make(accum)
   end
 
   def evaluate(ctx)
