@@ -1,5 +1,46 @@
 # hello_005: Booleans (`bool`); `if` statements and expressions.
-# TODO: `if`
 
 print(true);
 print(false);
+print(if (true) "Hello" else "World");
+print(if (false) "Hello" else "World");
+
+if (true) {
+  print("Visible");
+};
+
+if (false) {
+  print("Invisible");
+};
+
+if (true) {
+  print("True part");
+  print("Expected");
+} else {
+  print("False part");
+};
+
+if (false) {
+  print("First part");
+} else if (true) {
+  print("Second part");
+  print("Expected");
+};
+
+if (false) {
+  print("First part");
+} else if (true) {
+  print("Second part");
+  print("Expected");
+} else {
+  print("Third part");
+};
+
+if (false) {
+  print("First part");
+} else if (false) {
+  print("Second part");
+} else {
+  print("Third part");
+  print("Expected");
+};

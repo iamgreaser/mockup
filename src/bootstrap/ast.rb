@@ -10,14 +10,12 @@ $parser_specs = {
     p_ref(:block_stat),
     p_ref(:const_stat),
     p_ref(:var_stat),
-    p_ref(:if_stat),
   ], [
     :nothing,
     :expr,
     :block,
     :const,
     :var,
-    :if,
   ]),
 
   nothing_stat: p_literal(";"),
@@ -39,13 +37,6 @@ $parser_specs = {
     p_ref(:expr),
     p_literal(";"),
   ], [nil, :name, :value_type, nil, :value, nil]),
-  if_stat: p_sequence([
-    p_literal("if"), p_ref(:expr), p_literal("{"),
-    p_ref(:stat_list),
-    p_literal("}"), p_optional(
-      p_sequence([p_literal("else"), p_select([p_ref(:block_stat), p_ref(:if_stat)], [:else, :if])], [nil, true]),
-    ),
-  ], [nil, :test, nil, :true_block, nil, :false_block]),
 
   expr: p_sequence([p_ref(:suffixed_expr), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
   suffixed_expr: p_sequence([p_ref(:expr_terminal), p_ref(:expr_suffixes)], [:e, :suffixes]),
@@ -59,7 +50,8 @@ $parser_specs = {
     p_ref(:name_expr),
     p_ref(:string_expr),
     p_sequence([p_literal("("), p_ref(:expr), p_literal(")")], [nil, :SPECIAL_full_body, nil]),
-  ], [:bool, :int, :name, :string, :expr]),
+    p_ref(:ifelse_expr),
+  ], [:bool, :int, :name, :string, :expr, :ifelse]),
 
   binop_suffix: p_select([
     p_ref(:binop_chain_add),
@@ -87,6 +79,39 @@ $parser_specs = {
   int_expr: p_terminal(:int),
   name_expr: p_terminal(:name),
   string_expr: p_terminal(:string),
+
+  # NOTE: `if (x) y else z+2` is an ambiguous binop, `if (x) y+2 else z` is not, `if (x+2) y else z` is not.
+  # Thus, the `else` part must not have binops.
+  # `if (x) y else z()` is to be interpreted as `if (x) y else (z())` and not `(if (x) y else z)()`.
+  # This is like how `x+y()` is to be interpreted as `x+(y())` and not `(x+y)()`.
+  ifelse_expr: p_sequence([
+    p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
+    p_select([
+      p_ref(:ifelse_inline_part),
+      p_ref(:ifelse_block_part),
+    ], [:inline, :block])
+  ], [nil, nil, :test, nil, :body]),
+  ifelse_inline_part: p_sequence([
+    p_ref(:expr),
+    p_literal("else"),
+    p_ref(:suffixed_expr),
+  ], [:true_expr, nil, :false_expr]),
+  ifelse_block_part: p_sequence([
+    p_literal("{"),
+    p_ref(:stat_list),
+    p_literal("}"), p_optional(
+      p_sequence([
+        p_literal("else"), p_select([
+          p_ref(:ifelse_block_else),
+          p_ref(:ifelse_block_elseif),
+        ], [:else, :if]),
+      ], [nil, :SPECIAL_full_body])),
+  ], [nil, :true_block, nil, :else_case]),
+  ifelse_block_else: p_ref(:block_stat),
+  ifelse_block_elseif: p_sequence([
+    p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
+    p_ref(:ifelse_block_part),
+  ], [nil, nil, :test, nil, :body]),
 }
 
 $parser_specs.each{|name, pg|
@@ -314,6 +339,25 @@ class BinOpAST < AST
   end
 end
 
+class IfElseAST < AST
+  def initialize(test, true_part, false_part)
+    @test = test
+    @true_part = true_part
+    @false_part = false_part
+  end
+
+  def evaluate(ctx)
+    e = @test.evaluate(ctx)
+    if e == TRUE_BOOL
+      @true_part.evaluate(ctx)
+    elsif e == FALSE_BOOL
+      @false_part.evaluate(ctx) if @false_part != nil
+    else
+      raise "`if` expression test evaluated to a non-boolean: #{e}"
+    end
+  end
+end
+
 $parser_to_ast = {
   literal: proc {|n| LiteralAST.new(n[:literal]) },
 
@@ -382,6 +426,35 @@ $parser_to_ast = {
   # Leave these intact until we mess with them in a later pass
   expr_suffix_func_call: proc {|n| n},
 
+  ifelse_inline_part: proc {|n| n},
+  ifelse_block_part: proc {|n| n},
+  ifelse_expr: proc {|n|
+    n = n[:v]
+    if n[:body][:type] == :ifelse_inline_part then
+      IfElseAST.new(n[:test], n[:body][:v][:true_expr], n[:body][:v][:false_expr])
+    elsif n[:body][:type] == :ifelse_block_part then
+      test = n[:test]
+      true_part = n[:body][:v][:true_block]
+      false_part = n[:body][:v][:else_case]
+      if false_part != nil and false_part.kind_of?(Hash) then
+        false_part = false_part[:v]
+      end
+      IfElseAST.new(test, true_part, false_part)
+    else
+      raise "BUG: Unhandled case"
+    end
+  },
+  ifelse_block_else: proc {|n| n},
+  ifelse_block_elseif: proc {|n|
+    n = n[:v]
+    test = n[:test]
+    true_part = n[:body][:v][:true_block]
+    false_part = n[:body][:v][:else_case]
+    if false_part != nil and false_part.kind_of?(Hash) then
+      false_part = false_part[:v]
+    end
+    IfElseAST.new(test, true_part, false_part)
+  },
 }
 
 $terminal_to_ast = {
