@@ -6,7 +6,7 @@ class ExecContext
     # Builtins
     @current_scope = ExecScope.new(nil)
     @current_scope.define(false, "print", proc {|*args|
-      puts args.map(&:evaluate_to_string).join(" ")
+      puts args.map{|v| "#{v.evaluate_to_string()}(#{v.type.evaluate_to_string()})"}.join(" ")
     })
 
     # Global scope
@@ -69,6 +69,13 @@ class ExecScope
   end
 end
 
+class ValueTypeBase
+  def evaluate_to_string()
+    p ["x", self]
+    raise "TODO: Implement me in a concrete class!"
+  end
+end
+
 class ValueBase
   def evaluate_to_string()
     p ["x", self]
@@ -81,25 +88,53 @@ class ValueBase
   end
 end
 
-class VInt < ValueBase
-  attr_reader :bits, :signed, :value
-  def initialize(bits, signed, value)
+class VTInt < ValueTypeBase
+  attr_reader :bits, :signed
+  def initialize(bits, signed)
     @bits = bits
     @signed = signed
-    @value = value
-    assert_in_range()
   end
 
-  def assert_in_range()
+  def evaluate_to_string()
+    (@signed ? "i" : "u") + @bits.to_s
+  end
+
+  def assert_in_range(value)
     if @signed then
-      if @value < -(1<<(@bits-1)) then
-        raise "underflow for #{@bits}-bit signed integer: #{@value.to_s(16).upcase}"
-      elsif @value >= (1<<(@bits-1))
-        raise "overflow for #{@bits}-bit signed integer: #{@value.to_s(16).upcase}"
+      if value < -(1<<(@bits-1)) then
+        raise "underflow for #{@bits}-bit signed integer: #{value.to_s(16).upcase}"
+      elsif value >= (1<<(@bits-1))
+        raise "overflow for #{@bits}-bit signed integer: #{value.to_s(16).upcase}"
       end
     else
       raise "TODO: Handle unsigned integers"
     end
+  end
+
+  def coerce_int_type(other)
+    b1 = @bits
+    b2 = other.bits
+    # Coercion rules:
+    # - Unsigned(n) @ Signed(...) converts to Signed(n+1)
+    signed = @signed or other.signed
+    b1 += 1 if signed and not @signed
+    b2 += 1 if signed and not other.signed
+    # - Int(n) @ Int(m) converts to Int(max(n, m))
+    bits = b1
+    bits = b2 if b2 > b1
+    VTInt.new(bits, signed)
+  end
+
+  def make(value)
+    VInt.new(self, value)
+  end
+end
+class VInt < ValueBase
+  attr_reader :type, :value
+  def initialize(type, value)
+    @type = type
+    @value = value
+    @type.assert_in_range(value)
   end
 
   def evaluate_to_string()
@@ -108,16 +143,7 @@ class VInt < ValueBase
 
   def evaluate_binop(op, other)
     if other.kind_of?(VInt) then
-      b1 = @bits
-      b2 = other.bits
-      # Coercion rules:
-      # - Unsigned(n) @ Signed(...) converts to Signed(n+1)
-      signed = @signed or other.signed
-      b1 += 1 if signed and not @signed
-      b2 += 1 if signed and not other.signed
-      # - Int(n) @ Int(m) converts to Int(max(n, m))
-      bits = b1
-      bits = b2 if b2 > b1
+      type = @type.coerce_int_type(other.type)
 
       case op
       in BinOp::Add
@@ -133,7 +159,7 @@ class VInt < ValueBase
       else
         raise "TODO implement binop `#{op}`"
       end
-      VInt.new(bits, signed, v)
+      type.make(v)
     else
       p ["x", op, self, other]
       raise "cannot do binop between these types"
@@ -141,11 +167,25 @@ class VInt < ValueBase
   end
 end
 
+class VTString < ValueTypeBase
+  def make(rstring)
+    VString.new(rstring)
+  end
+
+  def evaluate_to_string()
+    "string"
+  end
+end
 class VString < ValueBase
+  TYPE_INSTANCE = VTString.new
   # TODO: Make this a wrapper around []u8
   attr_reader :rstring
   def initialize(rstring)
     @rstring = rstring
+  end
+
+  def type()
+    TYPE_INSTANCE
   end
 
   def evaluate_to_string()

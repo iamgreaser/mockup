@@ -141,7 +141,7 @@ class IntAST < AST
     else
       v = literal.to_i(10)
     end
-    @v = VInt.new(32, true, v)
+    @v = VTInt.new(32, true).make(v)
   end
 
   def evaluate(ctx)
