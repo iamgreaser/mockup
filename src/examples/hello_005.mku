@@ -1,0 +1,5 @@
+# hello_005: Booleans (`bool`); `if` statements and expressions.
+# TODO: `if`
+
+print(true);
+print(false);

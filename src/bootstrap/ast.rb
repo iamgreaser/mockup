@@ -54,11 +54,12 @@ $parser_specs = {
   ], [:func_call])),
   expr_suffix_func_call: p_sequence([p_literal("("), p_ref(:arg_list), p_literal(")")], [nil, :args, nil]),
   expr_terminal: p_select([
+    p_ref(:bool_expr),
     p_ref(:int_expr),
     p_ref(:name_expr),
     p_ref(:string_expr),
     p_sequence([p_literal("("), p_ref(:expr), p_literal(")")], [nil, :SPECIAL_full_body, nil]),
-  ], [:int, :name, :string, :expr]),
+  ], [:bool, :int, :name, :string, :expr]),
 
   binop_suffix: p_select([
     p_ref(:binop_chain_add),
@@ -82,6 +83,7 @@ $parser_specs = {
   arg_list: p_optional(p_sequence([p_ref(:expr), p_optional(p_ref(:opt_next_arg))], [:SPECIAL_head, :SPECIAL_tail])),
   opt_next_arg: p_sequence([p_literal(","), p_ref(:arg_list)], [nil, :SPECIAL_full_body]),
 
+  bool_expr: p_select([p_literal("true"), p_literal("false")], [:b_true, :b_false]),
   int_expr: p_terminal(:int),
   name_expr: p_terminal(:name),
   string_expr: p_terminal(:string),
