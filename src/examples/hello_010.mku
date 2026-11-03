@@ -1,0 +1,18 @@
+# hello_010: Lexical binding vs dynamic binding
+#
+# Currently, the bootstrap interpreter implements dynamic binding.
+# Ideally we'd use lexical binding.
+
+function F1(): string {
+  return "lexical";
+}
+function F2(): string {
+  return F1();
+}
+function F3(): string {
+  function F1(): string {
+    return "dynamic";
+  }
+  return F2();
+}
+print(F3());
