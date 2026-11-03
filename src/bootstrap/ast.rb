@@ -374,8 +374,9 @@ $parser_to_ast = {
   arg_list: proc {|n| n[:v]},
   opt_next_arg: proc {|n| n[:v]},
 
-  stat_list: proc {|n| StatListAST.new(n[:v])},
+  stat_list: proc {|n| StatListAST.new(n[:v].filter{|v| v != nil})},
   stat: proc {|n| n[:v]},
+  nothing_stat: proc {|n| nil},
   block_stat: proc {|n| BlockStatAST.new(n[:v][:stats])},
   const_stat: proc {|n| VarStatAST.new(false, n[:v][:name], n[:v][:value_type], n[:v][:value])},
   var_stat: proc {|n| VarStatAST.new(true, n[:v][:name], n[:v][:value_type], n[:v][:value])},
