@@ -30,7 +30,7 @@ $parser_specs = {
   expr_stat: p_sequence([p_ref(:expr_statfirst),
     p_optional(p_sequence([p_literal("="), p_ref(:expr)], [nil, :SPECIAL_full_body])),
     p_literal(";")], [:expr, :assign, nil]),
-  block_stat: p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :stats, nil]),
+  block_stat: p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :SPECIAL_full_body, nil]),
   const_stat: p_sequence([
     p_literal("const"), p_terminal(:name),
     p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
@@ -47,19 +47,19 @@ $parser_specs = {
   ], [nil, :name, :value_type, nil, :value, nil]),
   if_stat: p_sequence([
     p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
-    p_literal("{"), p_ref(:stat_list), p_literal("}"),
+    p_ref(:block_stat),
     p_optional(p_sequence([
       p_literal("else"),
       p_select([
-        p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :SPECIAL_full_body, nil]),
+        p_ref(:block_stat),
         p_ref(:if_stat),
-      ], [:elseif, :else]),
+      ], [:else, :elseif]),
     ], [nil, :SPECIAL_full_body])),
-  ], [nil, nil, :test, nil, nil, :true_block, nil, :else_case]),
+  ], [nil, nil, :test, nil, :true_block, :else_case]),
   while_stat: p_sequence([
     p_literal("while"), p_literal("("), p_ref(:expr), p_literal(")"),
-    p_literal("{"), p_ref(:stat_list), p_literal("}"),
-  ], [nil, nil, :test, nil, nil, :while_block, nil]),
+    p_ref(:block_stat),
+  ], [nil, nil, :test, nil, :while_block]),
 
   return_stat: p_sequence([p_literal("return"), p_optional(p_ref(:expr)), p_literal(";")], [nil, :SPECIAL_full_body, nil]),
 
@@ -67,8 +67,8 @@ $parser_specs = {
   function_stat: p_sequence([
     p_literal("function"), p_ref(:function_name), p_literal("("), p_ref(:param_list), p_literal(")"),
     p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
-    p_literal("{"), p_ref(:stat_list), p_literal("}"),
-  ], [nil, :name, nil, :params, nil, :return_type, nil, :body, nil]),
+    p_ref(:block_stat),
+  ], [nil, :name, nil, :params, nil, :return_type, :body]),
   function_name: p_terminal(:name),
   param_list: p_optional(p_sequence([
     p_ref(:param), p_optional(p_ref(:opt_next_param))
@@ -521,7 +521,7 @@ $parser_to_ast = {
   stat_list: proc {|n| StatListAST.new(n[:v].filter{|v| v != nil})},
   stat: proc {|n| n[:v]},
   nothing_stat: proc {|n| nil},
-  block_stat: proc {|n| BlockStatAST.new(n[:v][:stats])},
+  block_stat: proc {|n| BlockStatAST.new(n[:v])},
   const_stat: proc {|n| VarStatAST.new(false, n[:v][:name], n[:v][:value_type], n[:v][:value])},
   var_stat: proc {|n| VarStatAST.new(true, n[:v][:name], n[:v][:value_type], n[:v][:value])},
   expr_stat: proc {|n|
