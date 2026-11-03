@@ -1,0 +1,63 @@
+stat_list *= FULLBODY=stat ;
+stat | nothing=nothing_stat expr=expr_stat block=block_stat const=const_stat var=var_stat if=if_stat while=while_stat function=function_stat return=return_stat ;
+nothing_stat = `;` ;
+expr_stat = expr=expr_statfirst assign=opt_assign `;` ;
+opt_assign ?= `=` FULLBODY=expr ;
+block_stat = `{` FULLBODY=stat_list `}` ;
+const_stat = `const` name=Name value_type=opt_type `=` value=expr `;` ;
+var_stat = `var` name=Name value_type=opt_type `=` value=expr `;` ;
+opt_type ?= `:` FULLBODY=type_expr ;
+if_stat = `if` `(` test=expr `)` true_block=block_stat else_case=opt_else ;
+opt_else ?= `else` FULLBODY=else_select ;
+else_select | else=block_stat elseif=if_stat ;
+while_stat = `while` `(` test=expr `)` while_block=block_stat ;
+return_stat = `return` FULLBODY=opt_return `;` ;
+opt_return ?= FULLBODY=expr ;
+
+# Function names can be a few different things... eventually. TODO: Implement them!
+function_stat = `function` name=function_name `(` params=param_list `)` return_type=opt_type body=block_stat ;
+function_name | name=Name ;
+param_list ?= HEAD=param TAIL=opt_next_param ;
+param = name=Name `:` param_type=type_expr ;
+opt_next_param ?= `,` FULLBODY=param_list ;
+
+type_expr | expr=expr ;
+
+expr = e=suffixed_expr binop_suffix=opt_binop_suffix ;
+expr_statfirst = e=suffixed_expr_statfirst binop_suffix=opt_binop_suffix ;
+opt_binop_suffix ?= FULLBODY=binop_suffix ;
+suffixed_expr = e=expr_terminal suffixes=expr_suffixes ;
+suffixed_expr_statfirst = e=expr_terminal_statfirst suffixes=expr_suffixes ;
+expr_suffixes *| func_call=expr_suffix_func_call ;
+expr_suffix_func_call = `(` args=arg_list `)` ;
+arg_list ?= HEAD=expr TAIL=opt_next_arg ;
+opt_next_arg ?= `,` FULLBODY=arg_list ;
+expr_terminal_statfirst | bool=bool_expr int=int_expr name=name_expr string=string_expr expr=wrapped_expr ;
+expr_terminal | bool=bool_expr int=int_expr name=name_expr string=string_expr expr=wrapped_expr ifelse=ifelse_expr ;
+wrapped_expr = `(` FULLBODY=expr `)` ;
+
+binop_suffix | add=binop_chain_add sub=binop_chain_sub mul=binop_chain_mul div=binop_chain_div mod=binop_chain_mod eq=binop_chain_eq ne=binop_chain_ne lt=binop_chain_lt gt=binop_chain_gt le=binop_chain_le ge=binop_chain_ge and=binop_chain_and or=binop_chain_or ;
+binop_chain_add += `+` FULLBODY=suffixed_expr ;
+binop_chain_sub = `-` FULLBODY=suffixed_expr ;
+binop_chain_mul += `*` FULLBODY=suffixed_expr ;
+binop_chain_div = `/` FULLBODY=suffixed_expr ;
+binop_chain_mod = `%` FULLBODY=suffixed_expr ;
+binop_chain_eq = `==` FULLBODY=suffixed_expr ;
+binop_chain_ne = `!=` FULLBODY=suffixed_expr ;
+binop_chain_lt = `<` FULLBODY=suffixed_expr ;
+binop_chain_gt = `>` FULLBODY=suffixed_expr ;
+binop_chain_le = `<=` FULLBODY=suffixed_expr ;
+binop_chain_ge = `>=` FULLBODY=suffixed_expr ;
+binop_chain_and += `and` FULLBODY=suffixed_expr ;
+binop_chain_or += `or` FULLBODY=suffixed_expr ;
+
+bool_expr | b_true=`true` b_false=`false` ;
+int_expr = FULLBODY=Int ;
+name_expr = FULLBODY=Name ;
+string_expr = FULLBODY=String ;
+
+# NOTE: `if (x) y else z+2` is an ambiguous binop, `if (x) y+2 else z` is not, `if (x+2) y else z` is not.
+# Thus, the `else` part must not have binops.
+# `if (x) y else z()` is to be interpreted as `if (x) y else (z())` and not `(if (x) y else z)()`.
+# This is like how `x+y()` is to be interpreted as `x+(y())` and not `(x+y)()`.
+ifelse_expr = `if` `(` test=expr `)` true_expr=expr `else` false_expr=suffixed_expr ;

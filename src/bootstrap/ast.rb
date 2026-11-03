@@ -2,178 +2,6 @@
 # Abstract Syntax Tree (AST)
 ##############################
 
-$parser_specs = {
-  stat_list: p_zero_plus(p_ref(:stat)),
-  stat: p_select([
-    p_ref(:nothing_stat),
-    p_ref(:expr_stat),
-    p_ref(:block_stat),
-    p_ref(:const_stat),
-    p_ref(:var_stat),
-    p_ref(:if_stat),
-    p_ref(:while_stat),
-    p_ref(:function_stat),
-    p_ref(:return_stat),
-  ], [
-    :nothing,
-    :expr,
-    :block,
-    :const,
-    :var,
-    :if,
-    :while,
-    :function,
-    :return,
-  ]),
-
-  nothing_stat: p_literal(";"),
-  expr_stat: p_sequence([p_ref(:expr_statfirst),
-    p_optional(p_sequence([p_literal("="), p_ref(:expr)], [nil, :SPECIAL_full_body])),
-    p_literal(";")], [:expr, :assign, nil]),
-  block_stat: p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :SPECIAL_full_body, nil]),
-  const_stat: p_sequence([
-    p_literal("const"), p_terminal(:name),
-    p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
-    p_literal("="),
-    p_ref(:expr),
-    p_literal(";"),
-  ], [nil, :name, :value_type, nil, :value, nil]),
-  var_stat: p_sequence([
-    p_literal("var"), p_terminal(:name),
-    p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
-    p_literal("="),
-    p_ref(:expr),
-    p_literal(";"),
-  ], [nil, :name, :value_type, nil, :value, nil]),
-  if_stat: p_sequence([
-    p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
-    p_ref(:block_stat),
-    p_optional(p_sequence([
-      p_literal("else"),
-      p_select([
-        p_ref(:block_stat),
-        p_ref(:if_stat),
-      ], [:else, :elseif]),
-    ], [nil, :SPECIAL_full_body])),
-  ], [nil, nil, :test, nil, :true_block, :else_case]),
-  while_stat: p_sequence([
-    p_literal("while"), p_literal("("), p_ref(:expr), p_literal(")"),
-    p_ref(:block_stat),
-  ], [nil, nil, :test, nil, :while_block]),
-
-  return_stat: p_sequence([p_literal("return"), p_optional(p_ref(:expr)), p_literal(";")], [nil, :SPECIAL_full_body, nil]),
-
-  # Function names can be a few different things... eventually. TODO: Implement them!
-  function_stat: p_sequence([
-    p_literal("function"), p_ref(:function_name), p_literal("("), p_ref(:param_list), p_literal(")"),
-    p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
-    p_ref(:block_stat),
-  ], [nil, :name, nil, :params, nil, :return_type, :body]),
-  function_name: p_terminal(:name),
-  param_list: p_optional(p_sequence([
-    p_ref(:param), p_optional(p_ref(:opt_next_param))
-  ], [:SPECIAL_head, :SPECIAL_tail])),
-  param: p_sequence([p_terminal(:name), p_literal(":"), p_ref(:type_expr)], [:name, nil, :param_type]),
-  opt_next_param: p_sequence([p_literal(","), p_ref(:param_list)], [nil, :SPECIAL_full_body]),
-
-  type_expr: p_select([
-    p_ref(:expr),
-  ], [
-    :expr,
-  ]),
-
-  expr: p_sequence([p_ref(:suffixed_expr), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
-  expr_statfirst: p_sequence([p_ref(:suffixed_expr_statfirst), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
-  suffixed_expr: p_sequence([p_ref(:expr_terminal), p_ref(:expr_suffixes)], [:e, :suffixes]),
-  suffixed_expr_statfirst: p_sequence([p_ref(:expr_terminal_statfirst), p_ref(:expr_suffixes)], [:e, :suffixes]),
-  expr_suffixes: p_zero_plus(p_select([
-    p_ref(:expr_suffix_func_call),
-  ], [:func_call])),
-  expr_suffix_func_call: p_sequence([p_literal("("), p_ref(:arg_list), p_literal(")")], [nil, :args, nil]),
-  expr_terminal_statfirst: p_select([
-    p_ref(:bool_expr),
-    p_ref(:int_expr),
-    p_ref(:name_expr),
-    p_ref(:string_expr),
-    p_sequence([p_literal("("), p_ref(:expr), p_literal(")")], [nil, :SPECIAL_full_body, nil]),
-  ], [:bool, :int, :name, :string, :expr]),
-  expr_terminal: p_select([
-    p_ref(:bool_expr),
-    p_ref(:int_expr),
-    p_ref(:name_expr),
-    p_ref(:string_expr),
-    p_sequence([p_literal("("), p_ref(:expr), p_literal(")")], [nil, :SPECIAL_full_body, nil]),
-    p_ref(:ifelse_expr),
-  ], [:bool, :int, :name, :string, :expr, :ifelse]),
-
-  binop_suffix: p_select([
-    p_ref(:binop_chain_add),
-    p_ref(:binop_chain_sub),
-    p_ref(:binop_chain_mul),
-    p_ref(:binop_chain_div),
-    p_ref(:binop_chain_mod),
-    p_ref(:binop_chain_eq),
-    p_ref(:binop_chain_ne),
-    p_ref(:binop_chain_lt),
-    p_ref(:binop_chain_gt),
-    p_ref(:binop_chain_le),
-    p_ref(:binop_chain_ge),
-    p_ref(:binop_chain_and),
-    p_ref(:binop_chain_or),
-  ], [
-    :add,
-    :sub,
-    :mul,
-    :div,
-    :mod,
-    :eq,
-    :ne,
-    :lt,
-    :gt,
-    :le,
-    :ge,
-    :and,
-    :or,
-  ]),
-  binop_chain_add: p_one_plus(p_sequence([p_literal("+"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
-  binop_chain_sub: p_sequence([p_literal("-"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_mul: p_one_plus(p_sequence([p_literal("*"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
-  binop_chain_div: p_sequence([p_literal("/"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_mod: p_sequence([p_literal("%"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_eq: p_sequence([p_literal("=="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_ne: p_sequence([p_literal("!="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_lt: p_sequence([p_literal("<"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_gt: p_sequence([p_literal(">"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_le: p_sequence([p_literal("<="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_ge: p_sequence([p_literal(">="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
-  binop_chain_and: p_one_plus(p_sequence([p_literal("and"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
-  binop_chain_or: p_one_plus(p_sequence([p_literal("or"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
-
-  arg_list: p_optional(p_sequence([p_ref(:expr), p_optional(p_ref(:opt_next_arg))], [:SPECIAL_head, :SPECIAL_tail])),
-  opt_next_arg: p_sequence([p_literal(","), p_ref(:arg_list)], [nil, :SPECIAL_full_body]),
-
-  bool_expr: p_select([p_literal("true"), p_literal("false")], [:b_true, :b_false]),
-  int_expr: p_terminal(:int),
-  name_expr: p_terminal(:name),
-  string_expr: p_terminal(:string),
-
-  # NOTE: `if (x) y else z+2` is an ambiguous binop, `if (x) y+2 else z` is not, `if (x+2) y else z` is not.
-  # Thus, the `else` part must not have binops.
-  # `if (x) y else z()` is to be interpreted as `if (x) y else (z())` and not `(if (x) y else z)()`.
-  # This is like how `x+y()` is to be interpreted as `x+(y())` and not `(x+y)()`.
-  ifelse_expr: p_sequence([
-    p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
-    p_ref(:expr),
-    p_literal("else"),
-    p_ref(:suffixed_expr),
-  ], [nil, nil, :test, nil, :true_expr, nil, :false_expr]),
-}
-
-$parser_specs.each{|name, pg|
-  pg.generate()
-  #p [name, pg.class.name, pg.starts, pg.has_epsilon, pg]
-}
-
 ##############################
 # AST node definitions
 ##############################
@@ -513,6 +341,7 @@ $parser_to_ast = {
   string_expr: proc {|n| n[:v]},
   expr_terminal_statfirst: proc {|n| $parser_to_ast[:expr_terminal].call(n) },
   expr_terminal: proc {|n| n[:v]},
+  wrapped_expr: proc {|n| n[:v]},
   expr_suffixes: proc {|n| n[:v]},
 
   arg_list: proc {|n| n[:v]},
@@ -524,6 +353,7 @@ $parser_to_ast = {
   block_stat: proc {|n| BlockStatAST.new(n[:v])},
   const_stat: proc {|n| VarStatAST.new(false, n[:v][:name], n[:v][:value_type], n[:v][:value])},
   var_stat: proc {|n| VarStatAST.new(true, n[:v][:name], n[:v][:value_type], n[:v][:value])},
+  opt_type: proc {|n| n[:v]},
   expr_stat: proc {|n|
     n = n[:v]
     if n[:assign] then
@@ -532,10 +362,14 @@ $parser_to_ast = {
       ExprStatAST.new(n[:expr])
     end
   },
+  opt_assign: proc {|n| n[:v]},
   if_stat: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_block], n[:v][:else_case])},
+  opt_else: proc {|n| n[:v]},
+  else_select: proc {|n| n[:v]},
   while_stat: proc {|n| WhileAST.new(n[:v][:test], n[:v][:while_block])},
   function_stat: proc {|n| FuncDefAST.new(n[:v][:name], (n[:v][:params] or []), n[:v][:return_type], n[:v][:body])},
   return_stat: proc {|n| ReturnAST.new(n[:v])},
+  opt_return: proc {|n| n[:v]},
 
   param: proc {|n| ParamAST.new(n[:v][:param_type], n[:v][:name])},
   param_list: proc {|n| n[:v]},
@@ -562,6 +396,7 @@ $parser_to_ast = {
   },
 
   # Binop stuff
+  opt_binop_suffix: proc {|n| n[:v]},
   binop_suffix: proc {|n| n[:v]},
   # Leave these intact until we mess with them in a later pass
   binop_chain_add: proc {|n| n},
@@ -597,9 +432,9 @@ $parser_to_ast = {
 }
 
 $terminal_to_ast = {
-  int: proc {|literal| IntAST.new(literal) },
-  name: proc {|literal| NameAST.new(literal) },
-  string: proc {|literal| StringAST.new(literal) },
+  Int: proc {|literal| IntAST.new(literal) },
+  Name: proc {|literal| NameAST.new(literal) },
+  String: proc {|literal| StringAST.new(literal) },
 }
 
 $ast_apply_suffix = {

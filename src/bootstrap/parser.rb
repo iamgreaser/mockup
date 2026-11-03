@@ -307,21 +307,21 @@ class ParseSequence < ParseGenNode
     # Special cases
 
     # Singly-linked list
-    if result.include?(:SPECIAL_head) then
-      raise "Node spec invalid: :SPECIAL_head without :SPECIAL_tail" unless result.include?(:SPECIAL_tail)
-      raise "Node spec invalid: :SPECIAL_head and :SPECIAL_tail keys and something else likely defined" unless result.size == 2
-      head = result[:SPECIAL_head]
-      tail = result[:SPECIAL_tail]
+    if result.include?(:HEAD) then
+      raise "Node spec invalid: :HEAD without :TAIL" unless result.include?(:TAIL)
+      raise "Node spec invalid: :HEAD and :TAIL keys and something else likely defined" unless result.size == 2
+      head = result[:HEAD]
+      tail = result[:TAIL]
       tail = [] if tail == nil
       return [head] + tail
     end
-    raise "Node spec invalid: :SPECIAL_tail without :SPECIAL_head" if result.include?(:SPECIAL_head)
+    raise "Node spec invalid: :TAIL without :HEAD" if result.include?(:HEAD)
 
     # Everything else is syntax and we want to ignore it
-    if result.include?(:SPECIAL_full_body) then
+    if result.include?(:FULLBODY) then
       #p result
-      raise "Node spec invalid: :SPECIAL_full_body key and something else likely defined" unless result.size == 1
-      return result[:SPECIAL_full_body]
+      raise "Node spec invalid: :FULLBODY key and something else likely defined" unless result.size == 1
+      return result[:FULLBODY]
     end
 
     return result

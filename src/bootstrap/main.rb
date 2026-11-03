@@ -3,6 +3,7 @@
 
 require "./src/bootstrap/lexer.rb"
 require "./src/bootstrap/parser.rb"
+require "./src/bootstrap/grammar.rb"
 require "./src/bootstrap/ast.rb"
 
 require "./src/bootstrap/exec.rb"

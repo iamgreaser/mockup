@@ -250,9 +250,9 @@ class Token
   end
 
   def token_class()
-    return :string if self.is_string()
-    return :name if self.is_name()
-    return :int if self.is_int()
+    return :String if self.is_string()
+    return :Name if self.is_name()
+    return :Int if self.is_int()
     @literal
   end
 
