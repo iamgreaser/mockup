@@ -3,17 +3,20 @@
 ##############################
 
 KEYWORDS = Set[
+  "and",
   "const",
   "else",
   "function",
   "if",
+  "or",
   "var",
+  "while",
 ]
 
 OPERATORS = [
   ",", ";",
   ":",
-  "=",
+  "==", "!=", "<=", ">=", "=", "!", "<", ">",
   "(", ")",
 ]
 
@@ -148,7 +151,13 @@ class Lexer
       return Token.new(pos, accum)
 
     else
-      return Token.new(pos, c)
+      # Multi-char operators
+      push_back_char()
+      m = try_next_match(/^[=<>!]=/)
+      return Token.new(pos, m) if m
+
+      # Everything else
+      return Token.new(pos, next_char())
     end
   end
 
@@ -168,6 +177,14 @@ class Lexer
 
   def get_token_pos()
     TokenPos.new(@fname, @line_number, (@in_offs - @line_start) + 1)
+  end
+
+  def try_next_match(re)
+    m = re.match(@in_str[@in_offs..])
+    return nil unless m
+    result = m[0]
+    result.length.times { next_char() }
+    result
   end
 
   def next_match(re)

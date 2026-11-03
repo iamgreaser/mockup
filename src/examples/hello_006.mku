@@ -1,0 +1,12 @@
+# hello_006: `while` loops; boolean binops; job interview answer.
+
+{
+  var i: i32 = 1;
+  while (i <= 100) {
+    if ((i % (3*5)) == 0) { print("FizzBuzz"); }
+    else if ((i % 3) == 0) { print("Fizz"); }
+    else if ((i % 5) == 0) { print("Buzz"); }
+    else { print(i); }
+    i = i + 1;
+  }
+}

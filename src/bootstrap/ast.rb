@@ -11,6 +11,7 @@ $parser_specs = {
     p_ref(:const_stat),
     p_ref(:var_stat),
     p_ref(:if_stat),
+    p_ref(:while_stat),
   ], [
     :nothing,
     :expr,
@@ -18,6 +19,7 @@ $parser_specs = {
     :const,
     :var,
     :if,
+    :while,
   ]),
 
   nothing_stat: p_literal(";"),
@@ -50,6 +52,10 @@ $parser_specs = {
       ], [:elseif, :else]),
     ], [nil, :SPECIAL_full_body])),
   ], [nil, nil, :test, nil, nil, :true_block, nil, :else_case]),
+  while_stat: p_sequence([
+    p_literal("while"), p_literal("("), p_ref(:expr), p_literal(")"),
+    p_literal("{"), p_ref(:stat_list), p_literal("}"),
+  ], [nil, nil, :test, nil, nil, :while_block, nil]),
 
   expr: p_sequence([p_ref(:suffixed_expr), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
   expr_statfirst: p_sequence([p_ref(:suffixed_expr_statfirst), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
@@ -81,18 +87,42 @@ $parser_specs = {
     p_ref(:binop_chain_mul),
     p_ref(:binop_chain_div),
     p_ref(:binop_chain_mod),
+    p_ref(:binop_chain_eq),
+    p_ref(:binop_chain_ne),
+    p_ref(:binop_chain_lt),
+    p_ref(:binop_chain_gt),
+    p_ref(:binop_chain_le),
+    p_ref(:binop_chain_ge),
+    p_ref(:binop_chain_and),
+    p_ref(:binop_chain_or),
   ], [
     :add,
     :sub,
     :mul,
     :div,
     :mod,
+    :eq,
+    :ne,
+    :lt,
+    :gt,
+    :le,
+    :ge,
+    :and,
+    :or,
   ]),
   binop_chain_add: p_one_plus(p_sequence([p_literal("+"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
   binop_chain_sub: p_sequence([p_literal("-"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
   binop_chain_mul: p_one_plus(p_sequence([p_literal("*"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
   binop_chain_div: p_sequence([p_literal("/"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
   binop_chain_mod: p_sequence([p_literal("%"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_eq: p_sequence([p_literal("=="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_ne: p_sequence([p_literal("!="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_lt: p_sequence([p_literal("<"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_gt: p_sequence([p_literal(">"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_le: p_sequence([p_literal("<="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_ge: p_sequence([p_literal(">="), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body]),
+  binop_chain_and: p_one_plus(p_sequence([p_literal("and"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
+  binop_chain_or: p_one_plus(p_sequence([p_literal("or"), p_ref(:suffixed_expr)], [nil, :SPECIAL_full_body])),
 
   arg_list: p_optional(p_sequence([p_ref(:expr), p_optional(p_ref(:opt_next_arg))], [:SPECIAL_head, :SPECIAL_tail])),
   opt_next_arg: p_sequence([p_literal(","), p_ref(:arg_list)], [nil, :SPECIAL_full_body]),
@@ -323,6 +353,14 @@ module BinOp
   Mul = "*"
   Div = "/"
   Mod = "%"
+  Eq = "=="
+  Ne = "!="
+  Lt = "<"
+  Gt = ">"
+  Le = "<="
+  Ge = ">="
+  And = "and"
+  Or = "or"
 end
 
 class BinOpAST < AST
@@ -334,8 +372,30 @@ class BinOpAST < AST
 
   def evaluate(ctx)
     e1 = @e1.evaluate(ctx)
-    e2 = @e2.evaluate(ctx)
-    e1.evaluate_binop(@op, e2)
+    # SPECIAL CASE: `and`, `or` need to shortcut their results
+    case @op
+    in BinOp::And
+      if e1 == TRUE_BOOL then
+        @e2.evaluate(ctx)
+      elsif e1 == FALSE_BOOL then
+        e1
+      else
+        raise "expected boolean from left side of `and`"
+      end
+
+    in BinOp::Or
+      if e1 == FALSE_BOOL then
+        @e2.evaluate(ctx)
+      elsif e1 == TRUE_BOOL then
+        e1
+      else
+        raise "expected boolean from left side of `and`"
+      end
+
+    else
+      e2 = @e2.evaluate(ctx)
+      e1.evaluate_binop(@op, e2)
+    end
   end
 end
 
@@ -354,6 +414,27 @@ class IfElseAST < AST
       @false_part.evaluate(ctx) if @false_part != nil
     else
       raise "`if` expression test evaluated to a non-boolean: #{e}"
+    end
+  end
+end
+
+class WhileAST < AST
+  def initialize(test, while_part)
+    @test = test
+    @while_part = while_part
+  end
+
+  def evaluate(ctx)
+    loop do
+      e = @test.evaluate(ctx)
+      if e == TRUE_BOOL
+        # TODO: Handle `break`
+        @while_part.evaluate(ctx)
+      elsif e == FALSE_BOOL
+        break
+      else
+        raise "`if` expression test evaluated to a non-boolean: #{e}"
+      end
     end
   end
 end
@@ -390,6 +471,7 @@ $parser_to_ast = {
     end
   },
   if_stat: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_block], n[:v][:else_case])},
+  while_stat: proc {|n| WhileAST.new(n[:v][:test], n[:v][:while_block])},
 
   expr_statfirst: proc {|n| $parser_to_ast[:expr].call(n) },
   expr: proc {|n|
@@ -415,6 +497,14 @@ $parser_to_ast = {
   binop_chain_mul: proc {|n| n},
   binop_chain_div: proc {|n| n},
   binop_chain_mod: proc {|n| n},
+  binop_chain_eq: proc {|n| n},
+  binop_chain_ne: proc {|n| n},
+  binop_chain_lt: proc {|n| n},
+  binop_chain_gt: proc {|n| n},
+  binop_chain_le: proc {|n| n},
+  binop_chain_ge: proc {|n| n},
+  binop_chain_and: proc {|n| n},
+  binop_chain_or: proc {|n| n},
 
   # Suffixed expression stuff
   suffixed_expr_statfirst: proc {|n| $parser_to_ast[:suffixed_expr].call(n) },
@@ -459,6 +549,24 @@ $ast_apply_binop = {
   binop_chain_sub: proc {|e1, e2| BinOpAST.new(BinOp::Sub, e1, e2)},
   binop_chain_div: proc {|e1, e2| BinOpAST.new(BinOp::Div, e1, e2)},
   binop_chain_mod: proc {|e1, e2| BinOpAST.new(BinOp::Mod, e1, e2)},
+
+  # Non-associative comparisons
+  binop_chain_eq: proc {|e1, e2| BinOpAST.new(BinOp::Eq, e1, e2)},
+  binop_chain_ne: proc {|e1, e2| BinOpAST.new(BinOp::Ne, e1, e2)},
+  binop_chain_lt: proc {|e1, e2| BinOpAST.new(BinOp::Lt, e1, e2)},
+  binop_chain_gt: proc {|e1, e2| BinOpAST.new(BinOp::Gt, e1, e2)},
+  binop_chain_le: proc {|e1, e2| BinOpAST.new(BinOp::Le, e1, e2)},
+  binop_chain_ge: proc {|e1, e2| BinOpAST.new(BinOp::Ge, e1, e2)},
+
+  # Associative boolean comparisons
+  binop_chain_and: proc {|e1, n|
+    n.each {|e2| e1 = BinOpAST.new(BinOp::And, e1, e2) }
+    e1
+  },
+  binop_chain_or: proc {|e1, n|
+    n.each {|e2| e1 = BinOpAST.new(BinOp::Or, e1, e2) }
+    e1
+  },
 }
 
 ##############################

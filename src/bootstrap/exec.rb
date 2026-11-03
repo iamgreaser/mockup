@@ -199,6 +199,18 @@ class VInt < ValueBase
         v = @value / other.value
       in BinOp::Mod
         v = @value % other.value
+      in BinOp::Eq
+        return @value == other.value ? TRUE_BOOL : FALSE_BOOL
+      in BinOp::Ne
+        return @value != other.value ? TRUE_BOOL : FALSE_BOOL
+      in BinOp::Lt
+        return @value < other.value ? TRUE_BOOL : FALSE_BOOL
+      in BinOp::Gt
+        return @value > other.value ? TRUE_BOOL : FALSE_BOOL
+      in BinOp::Le
+        return @value <= other.value ? TRUE_BOOL : FALSE_BOOL
+      in BinOp::Ge
+        return @value >= other.value ? TRUE_BOOL : FALSE_BOOL
       else
         raise "TODO implement binop `#{op}`"
       end
