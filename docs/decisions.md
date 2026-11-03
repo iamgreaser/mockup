@@ -28,3 +28,38 @@ Sure, there's lex/yacc (which would be flex/bison in my case), but that's for LR
 Unlike Lua, I haven't written a Ruby parser, so transpiling the code to a suitable target language automatically would be non-trivial. Maybe I should've done this in Python as that has a working `ast` module. Oh well.
 
 ------------------------------
+
+## Binary operator precedence
+
+This has always been a pain, especially when considering bit-shifts, binary operators, and the usual arithmetic operators.
+
+So, I've gotten rid of precedence altogether.
+
+What this means is you have to do this explicitly:
+
+    1+(2*3)
+
+If there is no ambiguity, then you can repeat the same operator like so:
+
+    1+2+3
+
+because `(a+b)+c` is always equal to `a+(b+c)` ... over an infinite field.
+
+What you can't do is this:
+
+    1-2-3
+
+because:
+
+    (1-2)-3 = (-1)-3 = -4
+    1-(2-3) = 1-(-1) =  0
+
+and `-4` is not `0` . In other words, `+` is associative, while `-` is not.
+
+In practice, operators will always be paired tighter on the left, like `((a op b) op c) op d`.
+
+Side-effects will also be evaluated from left to right. That was a design goal of C# if I recall correctly, and it's a good idea to keep things consistent and unsurprising.
+
+I've been wanting to make a programming language without binary operator precedence for several years already. The whole thing about honouring associativity is a more recent idea I've had, though.
+
+------------------------------
