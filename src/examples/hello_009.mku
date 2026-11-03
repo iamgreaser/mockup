@@ -1,0 +1,17 @@
+# hello_009: Recursive factorial functions
+
+function fac1(x: i32): i32 {
+  return if (x <= 1) 1 else (x*fac1(x-1));
+}
+
+function fac2_internal(acc: i32, x: i32): i32 {
+  return if (x <= 1) acc else fac2_internal(acc*x, x-1);
+}
+function fac2(x: i32): i32 {
+  return fac2_internal(1, x);
+}
+
+print(fac1(0));
+print(fac2(0));
+print(fac1(9));
+print(fac2(9));
