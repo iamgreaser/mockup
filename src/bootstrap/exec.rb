@@ -37,10 +37,6 @@ class ExecContext
     @current_scope.define(is_mutable, key, value_type, value)
   end
 
-  def []=(key, value)
-    @current_scope[key] = value
-  end
-
   def [](key)
     @current_scope[key]
   end
@@ -57,23 +53,13 @@ class ExecScope
     @vars[key] = VarSlot.new(is_mutable, value_type, value_type.coerce(value))
   end
 
-  def []=(key, value)
-    if @vars.include?(key) then
-      @vars[key].set(value)
-    elsif @parent then
-      @parent[key] = value
-    else
-      raise "cannot write to non-existent variable `#{key}`"
-    end
-  end
-
   def [](key)
     if @vars.include?(key) then
-      @vars[key].value
+      @vars[key]
     elsif @parent then
       @parent[key]
     else
-      raise "cannot read from non-existent variable `#{key}`"
+      raise "cannot access non-existent variable `#{key}`"
     end
   end
 end

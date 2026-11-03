@@ -197,11 +197,11 @@ class NameAST < AST
   end
 
   def evaluate(ctx)
-    ctx[@n]
+    ctx[@n].value
   end
 
   def evaluate_assignment(ctx, value)
-    ctx[@n] = value
+    ctx[@n].set(value)
   end
 end
 
