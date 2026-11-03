@@ -9,6 +9,7 @@ KEYWORDS = Set[
   "function",
   "if",
   "or",
+  "return",
   "var",
   "while",
 ]

@@ -83,6 +83,8 @@ class ExecScope
   end
 end
 
+
+
 class ValueBase
   def evaluate_to_string()
     p ["x", self]
@@ -158,8 +160,68 @@ class VHostProc < ValueBase
     self.to_s
   end
 
-  def call(*args)
+  def call(ctx, *args)
     @fn.call(*args)
+  end
+end
+
+class VTASTProc < ValueTypeBase
+  attr_reader :param_types, :return_type
+  def initialize(param_types, return_type)
+    @param_types = param_types
+    @return_type = return_type
+  end
+
+  def make(ast)
+    VASTProc.new(self, ast)
+  end
+
+  def ==(other)
+    self.class == other.class and @return_type == other.return_type and @param_types.zip(other.param_types).all?{|a,b| a == b}
+  end
+
+  #def evaluate_to_string()
+  #  result = "function(...)"
+  #  result
+  #end
+end
+class VASTProc < ValueBase
+  def initialize(ast_type, ast)
+    @ast_type = ast_type
+    @ast = ast
+    # TODO: Verify!
+  end
+
+  def type()
+    @ast_type
+  end
+
+  #def evaluate_to_string()
+  #  self.to_s
+  #end
+
+  def call(ctx, *args)
+    raise "expected #{@ast_type.param_types.length} args, got #{args.length} args instead" unless @ast_type.param_types.length == args.length
+    #p ["T", @ast_type]
+    #p ["p", @ast_type.param_types]
+    #p ["r", @ast_type.return_type]
+    #p ["a", @ast.body]
+    # FIXME: Use lexical scoping; this is dynamic scoping!
+    ctx.push_new_scope()
+    begin
+      @ast.params.zip(@ast_type.param_types).zip(args).each do |(param, param_type), arg|
+        ctx.define_existing(false, param.name.n, param_type, arg)
+      end
+      result = catch(:return) do
+        @ast.body.evaluate(ctx)
+        # If it falls through, it's void
+        nil
+      end
+      return nil if @ast_type.return_type == nil
+      @ast_type.return_type.coerce(result)
+    ensure
+      ctx.pop_scope()
+    end
   end
 end
 

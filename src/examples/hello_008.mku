@@ -1,0 +1,19 @@
+# hello_008: Functions
+
+function add_two_numbers(x: i32, y: i32): i32 {
+  return x + y;
+}
+
+function add_3(x: i32): i32 {
+  return add_two_numbers(x, 3);
+}
+
+function print_twice(x: i32) {
+  print(x);
+  print(x);
+  return;
+}
+
+print(add_3(2));
+print_twice(add_3(3));
+print(add_3(5));

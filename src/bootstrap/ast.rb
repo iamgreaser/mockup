@@ -12,6 +12,8 @@ $parser_specs = {
     p_ref(:var_stat),
     p_ref(:if_stat),
     p_ref(:while_stat),
+    p_ref(:function_stat),
+    p_ref(:return_stat),
   ], [
     :nothing,
     :expr,
@@ -20,6 +22,8 @@ $parser_specs = {
     :var,
     :if,
     :while,
+    :function,
+    :return,
   ]),
 
   nothing_stat: p_literal(";"),
@@ -29,14 +33,14 @@ $parser_specs = {
   block_stat: p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :stats, nil]),
   const_stat: p_sequence([
     p_literal("const"), p_terminal(:name),
-    p_optional(p_sequence([p_literal(":"), p_ref(:expr)], [nil, :SPECIAL_full_body])),
+    p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
     p_literal("="),
     p_ref(:expr),
     p_literal(";"),
   ], [nil, :name, :value_type, nil, :value, nil]),
   var_stat: p_sequence([
     p_literal("var"), p_terminal(:name),
-    p_optional(p_sequence([p_literal(":"), p_ref(:expr)], [nil, :SPECIAL_full_body])),
+    p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
     p_literal("="),
     p_ref(:expr),
     p_literal(";"),
@@ -56,6 +60,27 @@ $parser_specs = {
     p_literal("while"), p_literal("("), p_ref(:expr), p_literal(")"),
     p_literal("{"), p_ref(:stat_list), p_literal("}"),
   ], [nil, nil, :test, nil, nil, :while_block, nil]),
+
+  return_stat: p_sequence([p_literal("return"), p_optional(p_ref(:expr)), p_literal(";")], [nil, :SPECIAL_full_body, nil]),
+
+  # Function names can be a few different things... eventually. TODO: Implement them!
+  function_stat: p_sequence([
+    p_literal("function"), p_ref(:function_name), p_literal("("), p_ref(:param_list), p_literal(")"),
+    p_optional(p_sequence([p_literal(":"), p_ref(:type_expr)], [nil, :SPECIAL_full_body])),
+    p_literal("{"), p_ref(:stat_list), p_literal("}"),
+  ], [nil, :name, nil, :params, nil, :return_type, nil, :body, nil]),
+  function_name: p_terminal(:name),
+  param_list: p_optional(p_sequence([
+    p_ref(:param), p_optional(p_ref(:opt_next_param))
+  ], [:SPECIAL_head, :SPECIAL_tail])),
+  param: p_sequence([p_terminal(:name), p_literal(":"), p_ref(:type_expr)], [:name, nil, :param_type]),
+  opt_next_param: p_sequence([p_literal(","), p_ref(:param_list)], [nil, :SPECIAL_full_body]),
+
+  type_expr: p_select([
+    p_ref(:expr),
+  ], [
+    :expr,
+  ]),
 
   expr: p_sequence([p_ref(:suffixed_expr), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
   expr_statfirst: p_sequence([p_ref(:suffixed_expr_statfirst), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
@@ -342,7 +367,7 @@ class FuncCallAST < AST
   end
 
   def evaluate(ctx)
-    @e.evaluate(ctx).call(*(@args.map{|a| a.evaluate(ctx)}))
+    @e.evaluate(ctx).call(ctx, *(@args.map{|a| a.evaluate(ctx)}))
   end
 end
 
@@ -438,6 +463,44 @@ class WhileAST < AST
   end
 end
 
+class ReturnAST < AST
+  def initialize(e)
+    @e = e
+  end
+
+  def evaluate(ctx)
+    e = @e != nil ? @e.evaluate(ctx) : nil
+    throw :return, e
+  end
+end
+
+class FuncDefAST < AST
+  attr_reader :name, :params, :return_type, :body
+  def initialize(name, params, return_type, body)
+    @name = name.n
+    @params = params
+    @return_type = return_type
+    @body = body
+  end
+
+  def evaluate(ctx)
+    ftype = VTASTProc.new(
+      @params.map{|p| p.param_type.evaluate(ctx)},
+      @return_type ? @return_type.evaluate(ctx) : nil,
+    )
+    f = ftype.make(self)
+    ctx.define_existing(false, @name, ftype, f)
+  end
+end
+
+class ParamAST < AST
+  attr_reader :param_type, :name
+  def initialize(param_type, name)
+    @param_type = param_type
+    @name = name
+  end
+end
+
 $parser_to_ast = {
   literal: proc {|n| LiteralAST.new(n[:literal]) },
 
@@ -471,6 +534,16 @@ $parser_to_ast = {
   },
   if_stat: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_block], n[:v][:else_case])},
   while_stat: proc {|n| WhileAST.new(n[:v][:test], n[:v][:while_block])},
+  function_stat: proc {|n| FuncDefAST.new(n[:v][:name], n[:v][:params], n[:v][:return_type], n[:v][:body])},
+  return_stat: proc {|n| ReturnAST.new(n[:v])},
+
+  param: proc {|n| ParamAST.new(n[:v][:param_type], n[:v][:name])},
+  param_list: proc {|n| n[:v]},
+  opt_next_param: proc {|n| n[:v]},
+
+  function_name: proc {|n| n[:v]},
+
+  type_expr: proc {|n| n[:v]},
 
   expr_statfirst: proc {|n| $parser_to_ast[:expr].call(n) },
   expr: proc {|n|
