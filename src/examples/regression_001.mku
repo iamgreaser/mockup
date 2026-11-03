@@ -1,0 +1,6 @@
+# regression_001: `expr_stat` assignments were using `expr_statfirst` and not `expr`.
+# This meant that an `if` expression was accidentally invalid.
+
+var x: i32 = 2;
+x = if(x < 4) 4 else x;
+print(x);

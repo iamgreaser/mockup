@@ -28,7 +28,7 @@ $parser_specs = {
 
   nothing_stat: p_literal(";"),
   expr_stat: p_sequence([p_ref(:expr_statfirst),
-    p_optional(p_sequence([p_literal("="), p_ref(:expr_statfirst)], [nil, :SPECIAL_full_body])),
+    p_optional(p_sequence([p_literal("="), p_ref(:expr)], [nil, :SPECIAL_full_body])),
     p_literal(";")], [:expr, :assign, nil]),
   block_stat: p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :stats, nil]),
   const_stat: p_sequence([
