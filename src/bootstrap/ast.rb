@@ -10,17 +10,19 @@ $parser_specs = {
     p_ref(:block_stat),
     p_ref(:const_stat),
     p_ref(:var_stat),
+    p_ref(:if_stat),
   ], [
     :nothing,
     :expr,
     :block,
     :const,
     :var,
+    :if,
   ]),
 
   nothing_stat: p_literal(";"),
-  expr_stat: p_sequence([p_ref(:expr),
-    p_optional(p_sequence([p_literal("="), p_ref(:expr)], [nil, :SPECIAL_full_body])),
+  expr_stat: p_sequence([p_ref(:expr_statfirst),
+    p_optional(p_sequence([p_literal("="), p_ref(:expr_statfirst)], [nil, :SPECIAL_full_body])),
     p_literal(";")], [:expr, :assign, nil]),
   block_stat: p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :stats, nil]),
   const_stat: p_sequence([
@@ -37,13 +39,33 @@ $parser_specs = {
     p_ref(:expr),
     p_literal(";"),
   ], [nil, :name, :value_type, nil, :value, nil]),
+  if_stat: p_sequence([
+    p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
+    p_literal("{"), p_ref(:stat_list), p_literal("}"),
+    p_optional(p_sequence([
+      p_literal("else"),
+      p_select([
+        p_sequence([p_literal("{"), p_ref(:stat_list), p_literal("}")], [nil, :SPECIAL_full_body, nil]),
+        p_ref(:if_stat),
+      ], [:elseif, :else]),
+    ], [nil, :SPECIAL_full_body])),
+  ], [nil, nil, :test, nil, nil, :true_block, nil, :else_case]),
 
   expr: p_sequence([p_ref(:suffixed_expr), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
+  expr_statfirst: p_sequence([p_ref(:suffixed_expr_statfirst), p_optional(p_ref(:binop_suffix))], [:e, :binop_suffix]),
   suffixed_expr: p_sequence([p_ref(:expr_terminal), p_ref(:expr_suffixes)], [:e, :suffixes]),
+  suffixed_expr_statfirst: p_sequence([p_ref(:expr_terminal_statfirst), p_ref(:expr_suffixes)], [:e, :suffixes]),
   expr_suffixes: p_zero_plus(p_select([
     p_ref(:expr_suffix_func_call),
   ], [:func_call])),
   expr_suffix_func_call: p_sequence([p_literal("("), p_ref(:arg_list), p_literal(")")], [nil, :args, nil]),
+  expr_terminal_statfirst: p_select([
+    p_ref(:bool_expr),
+    p_ref(:int_expr),
+    p_ref(:name_expr),
+    p_ref(:string_expr),
+    p_sequence([p_literal("("), p_ref(:expr), p_literal(")")], [nil, :SPECIAL_full_body, nil]),
+  ], [:bool, :int, :name, :string, :expr]),
   expr_terminal: p_select([
     p_ref(:bool_expr),
     p_ref(:int_expr),
@@ -86,32 +108,10 @@ $parser_specs = {
   # This is like how `x+y()` is to be interpreted as `x+(y())` and not `(x+y)()`.
   ifelse_expr: p_sequence([
     p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
-    p_select([
-      p_ref(:ifelse_inline_part),
-      p_ref(:ifelse_block_part),
-    ], [:inline, :block])
-  ], [nil, nil, :test, nil, :body]),
-  ifelse_inline_part: p_sequence([
     p_ref(:expr),
     p_literal("else"),
     p_ref(:suffixed_expr),
-  ], [:true_expr, nil, :false_expr]),
-  ifelse_block_part: p_sequence([
-    p_literal("{"),
-    p_ref(:stat_list),
-    p_literal("}"), p_optional(
-      p_sequence([
-        p_literal("else"), p_select([
-          p_ref(:ifelse_block_else),
-          p_ref(:ifelse_block_elseif),
-        ], [:else, :if]),
-      ], [nil, :SPECIAL_full_body])),
-  ], [nil, :true_block, nil, :else_case]),
-  ifelse_block_else: p_ref(:block_stat),
-  ifelse_block_elseif: p_sequence([
-    p_literal("if"), p_literal("("), p_ref(:expr), p_literal(")"),
-    p_ref(:ifelse_block_part),
-  ], [nil, nil, :test, nil, :body]),
+  ], [nil, nil, :test, nil, :true_expr, nil, :false_expr]),
 }
 
 $parser_specs.each{|name, pg|
@@ -368,6 +368,7 @@ $parser_to_ast = {
   name_expr: proc {|n| n[:v]},
   int_expr: proc {|n| n[:v]},
   string_expr: proc {|n| n[:v]},
+  expr_terminal_statfirst: proc {|n| $parser_to_ast[:expr_terminal].call(n) },
   expr_terminal: proc {|n| n[:v]},
   expr_suffixes: proc {|n| n[:v]},
 
@@ -388,7 +389,9 @@ $parser_to_ast = {
       ExprStatAST.new(n[:expr])
     end
   },
+  if_stat: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_block], n[:v][:else_case])},
 
+  expr_statfirst: proc {|n| $parser_to_ast[:expr].call(n) },
   expr: proc {|n|
     n = n[:v]
     result = n[:e]
@@ -414,6 +417,7 @@ $parser_to_ast = {
   binop_chain_mod: proc {|n| n},
 
   # Suffixed expression stuff
+  suffixed_expr_statfirst: proc {|n| $parser_to_ast[:suffixed_expr].call(n) },
   suffixed_expr: proc {|n|
     n = n[:v]
     result = n[:e]
@@ -427,35 +431,7 @@ $parser_to_ast = {
   # Leave these intact until we mess with them in a later pass
   expr_suffix_func_call: proc {|n| n},
 
-  ifelse_inline_part: proc {|n| n},
-  ifelse_block_part: proc {|n| n},
-  ifelse_expr: proc {|n|
-    n = n[:v]
-    if n[:body][:type] == :ifelse_inline_part then
-      IfElseAST.new(n[:test], n[:body][:v][:true_expr], n[:body][:v][:false_expr])
-    elsif n[:body][:type] == :ifelse_block_part then
-      test = n[:test]
-      true_part = n[:body][:v][:true_block]
-      false_part = n[:body][:v][:else_case]
-      if false_part != nil and false_part.kind_of?(Hash) then
-        false_part = false_part[:v]
-      end
-      IfElseAST.new(test, true_part, false_part)
-    else
-      raise "BUG: Unhandled case"
-    end
-  },
-  ifelse_block_else: proc {|n| n},
-  ifelse_block_elseif: proc {|n|
-    n = n[:v]
-    test = n[:test]
-    true_part = n[:body][:v][:true_block]
-    false_part = n[:body][:v][:else_case]
-    if false_part != nil and false_part.kind_of?(Hash) then
-      false_part = false_part[:v]
-    end
-    IfElseAST.new(test, true_part, false_part)
-  },
+  ifelse_expr: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_expr], n[:v][:false_expr])},
 }
 
 $terminal_to_ast = {

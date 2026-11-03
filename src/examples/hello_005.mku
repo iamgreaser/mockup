@@ -8,25 +8,32 @@ print(if (false) "Hello" else "World");
 
 if (true) {
   print("Visible");
-};
+}
 
 if (false) {
   print("Invisible");
-};
+}
 
 if (true) {
   print("True part");
   print("Expected");
 } else {
   print("False part");
-};
+}
+
+if (true) {
+  print("First part");
+  print("Expected");
+} else if (true) {
+  print("Second part");
+}
 
 if (false) {
   print("First part");
 } else if (true) {
   print("Second part");
   print("Expected");
-};
+}
 
 if (false) {
   print("First part");
@@ -35,7 +42,7 @@ if (false) {
   print("Expected");
 } else {
   print("Third part");
-};
+}
 
 if (false) {
   print("First part");
@@ -44,4 +51,4 @@ if (false) {
 } else {
   print("Third part");
   print("Expected");
-};
+}
