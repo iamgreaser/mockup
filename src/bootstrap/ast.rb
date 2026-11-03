@@ -199,6 +199,23 @@ class FuncCallAST < AST
   end
 end
 
+class SubscriptAST < AST
+  def initialize(e, base, has_len, len)
+    @e = e
+    @base = base
+    @has_len = has_len
+    @len = len
+  end
+
+  def evaluate(ctx)
+    if @has_len then
+      @e.evaluate(ctx).subscript_slice(@base.evaluate(ctx), @len == nil ? nil : @len.evaluate(ctx))
+    else
+      @e.evaluate(ctx).subscript_element(@base.evaluate(ctx))
+    end
+  end
+end
+
 module BinOp
   Add = "+"
   Sub = "-"
@@ -394,6 +411,7 @@ $parser_to_ast = {
     end
     result
   },
+  opt_expr: proc {|n| n[:v]},
 
   # Binop stuff
   opt_binop_suffix: proc {|n| n[:v]},
@@ -427,6 +445,8 @@ $parser_to_ast = {
   },
   # Leave these intact until we mess with them in a later pass
   expr_suffix_func_call: proc {|n| n},
+  expr_suffix_subscript: proc {|n| n},
+  opt_subscript_span: proc {|n| n[:v]},
 
   ifelse_expr: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_expr], n[:v][:false_expr])},
 }
@@ -439,6 +459,7 @@ $terminal_to_ast = {
 
 $ast_apply_suffix = {
   expr_suffix_func_call: proc {|e, n| FuncCallAST.new(e, (n[:args] or [])) },
+  expr_suffix_subscript: proc {|e, n| SubscriptAST.new(e, n[:base], n[:len] != nil, n[:len] != nil ? n[:len][:len]: nil) }
 }
 
 $ast_apply_binop = {

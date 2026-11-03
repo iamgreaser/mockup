@@ -22,16 +22,29 @@ param = name=Name `:` param_type=type_expr ;
 opt_next_param ?= `,` FULLBODY=param_list ;
 
 type_expr | expr=expr ;
+opt_expr ?= FULLBODY=expr ;
 
 expr = e=suffixed_expr binop_suffix=opt_binop_suffix ;
 expr_statfirst = e=suffixed_expr_statfirst binop_suffix=opt_binop_suffix ;
 opt_binop_suffix ?= FULLBODY=binop_suffix ;
+
 suffixed_expr = e=expr_terminal suffixes=expr_suffixes ;
 suffixed_expr_statfirst = e=expr_terminal_statfirst suffixes=expr_suffixes ;
-expr_suffixes *| func_call=expr_suffix_func_call ;
+expr_suffixes *| func_call=expr_suffix_func_call subscript=expr_suffix_subscript ;
+
 expr_suffix_func_call = `(` args=arg_list `)` ;
 arg_list ?= HEAD=expr TAIL=opt_next_arg ;
 opt_next_arg ?= `,` FULLBODY=arg_list ;
+
+# Subscripts must be of one of the following forms (`a`, `b` denotes any expression):
+# - [a] - single element `a`
+# - [a:b] - `b` elements starting from `a`
+# - [a:] - All elements starting from `a`
+# If you want [:e], use [0:e] instead.
+# If you want [:], use [0:] instead.
+expr_suffix_subscript = `[` base=expr len=opt_subscript_span `]` ;
+opt_subscript_span ?= `:` len=opt_expr ;
+
 expr_terminal_statfirst | bool=bool_expr int=int_expr name=name_expr string=string_expr expr=wrapped_expr ;
 expr_terminal | bool=bool_expr int=int_expr name=name_expr string=string_expr expr=wrapped_expr ifelse=ifelse_expr ;
 wrapped_expr = `(` FULLBODY=expr `)` ;

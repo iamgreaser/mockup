@@ -86,8 +86,23 @@ class ValueBase
     raise "TODO: Implement me in a concrete class!"
   end
 
+  def evaluate_to_int()
+    p ["x", self]
+    raise "TODO: Implement me in a concrete class!"
+  end
+
   def evaluate_binop(op, other)
     p ["x", op, self, other]
+    raise "TODO: Implement me in a concrete class!"
+  end
+
+  def subscript_element(base)
+    p ["x", self, base]
+    raise "TODO: Implement me in a concrete class!"
+  end
+
+  def subscript_slice(base, len)
+    p ["x", self, base, len]
     raise "TODO: Implement me in a concrete class!"
   end
 end
@@ -330,6 +345,10 @@ class VInt < ValueBase
     @type.assert_in_range(value)
   end
 
+  def evaluate_to_int()
+    @value
+  end
+
   def evaluate_to_string()
     @value.to_s
   end
@@ -405,5 +424,24 @@ class VString < ValueBase
   def evaluate_binop(op, other)
     p ["x", op, self, other]
     raise "binops not implemented on strings, not sure if they ever will be"
+  end
+
+  def subscript_element(base)
+    base = base.evaluate_to_int()
+    raise "index #{base} out of range" unless base >= 0 and base < @rstring.length
+    VTInt.new(32, true).make(@rstring[base].ord)
+  end
+
+  def subscript_slice(base, len)
+    base = base.evaluate_to_int()
+    raise "index #{base} out of range" unless base >= 0 and base < @rstring.length
+    if len == nil then
+      self.type().make(@rstring[base..])
+    else
+      len = len.evaluate_to_int()
+      final = base + len - 1
+      raise "final index #{final} out of range" unless len == 0 or (final >= 0 and final < @rstring.length)
+      self.type().make(@rstring[base...(base+len)])
+    end
   end
 end
