@@ -534,7 +534,7 @@ $parser_to_ast = {
   },
   if_stat: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_block], n[:v][:else_case])},
   while_stat: proc {|n| WhileAST.new(n[:v][:test], n[:v][:while_block])},
-  function_stat: proc {|n| FuncDefAST.new(n[:v][:name], n[:v][:params], n[:v][:return_type], n[:v][:body])},
+  function_stat: proc {|n| FuncDefAST.new(n[:v][:name], (n[:v][:params] or []), n[:v][:return_type], n[:v][:body])},
   return_stat: proc {|n| ReturnAST.new(n[:v])},
 
   param: proc {|n| ParamAST.new(n[:v][:param_type], n[:v][:name])},
@@ -603,7 +603,7 @@ $terminal_to_ast = {
 }
 
 $ast_apply_suffix = {
-  expr_suffix_func_call: proc {|e, n| FuncCallAST.new(e, n[:args]) },
+  expr_suffix_func_call: proc {|e, n| FuncCallAST.new(e, (n[:args] or [])) },
 }
 
 $ast_apply_binop = {
