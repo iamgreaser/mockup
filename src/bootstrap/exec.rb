@@ -51,20 +51,15 @@ class ExecScope
   def initialize(parent)
     @parent = parent
     @vars = {}
-    @var_types = {}
-    @var_is_mutable = {}
   end
 
   def define(is_mutable, key, value_type, value)
-    @vars[key] = value_type.coerce(value)
-    @var_types[key] = value_type
-    @var_is_mutable[key] = is_mutable
+    @vars[key] = VarSlot.new(is_mutable, value_type, value_type.coerce(value))
   end
 
   def []=(key, value)
     if @vars.include?(key) then
-      raise "attempted to write to read-only name `#{key}`" unless @var_is_mutable[key]
-      @vars[key] = value
+      @vars[key].set(value)
     elsif @parent then
       @parent[key] = value
     else
@@ -74,12 +69,26 @@ class ExecScope
 
   def [](key)
     if @vars.include?(key) then
-      @vars[key]
+      @vars[key].value
     elsif @parent then
       @parent[key]
     else
       raise "cannot read from non-existent variable `#{key}`"
     end
+  end
+end
+
+class VarSlot
+  attr_reader :value
+  def initialize(is_mutable, var_type, value)
+    @is_mutable = is_mutable
+    @var_type = var_type
+    @value = @var_type.coerce(value)
+  end
+
+  def set(value)
+    raise "attempted to write to read-only variable" unless @is_mutable
+    @value = @var_type.coerce(value)
   end
 end
 
