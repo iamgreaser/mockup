@@ -310,8 +310,7 @@ class VarStatAST < AST
   end
 
   def evaluate(ctx)
-    # TODO: Handle types!
-    ctx.define(@is_mutable, @name.n, @value.evaluate(ctx))
+    ctx.define_existing(@is_mutable, @name.n, @value_type.evaluate(ctx), @value.evaluate(ctx))
   end
 end
 

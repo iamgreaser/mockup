@@ -5,11 +5,17 @@ class ExecContext
   def initialize()
     # Builtins
     @current_scope = ExecScope.new(nil)
-    @current_scope.define(false, "print", proc {|*args|
+    self.define_construct(false, "print", VTHostProc.new, [proc {|*args|
       puts args.map{|v| "#{v.evaluate_to_string()}(#{v.type.evaluate_to_string()})"}.join(" ")
-    })
-    @current_scope.define(false, "true", TRUE_BOOL);
-    @current_scope.define(false, "false", FALSE_BOOL);
+    }])
+    self.define_construct(false, "true", VTBool.new, [true])
+    self.define_construct(false, "false", VTBool.new, [false])
+
+    self.define_construct(false, "bool", VTType.new, [VBool.new(false).type])
+    self.define_construct(false, "u8", VTType.new, [VTInt.new(8, false)])
+    self.define_construct(false, "i32", VTType.new, [VTInt.new(32, true)])
+    self.define_construct(false, "string", VTType.new, [VString.new("").type])
+    self.define_construct(false, "type", VTType.new, [VTType.new.type])
 
     # Global scope
     @current_scope = ExecScope.new(@current_scope)
@@ -23,8 +29,12 @@ class ExecContext
     @current_scope = @current_scope.parent
   end
 
-  def define(is_mutable, key, value)
-    @current_scope.define(is_mutable, key, value)
+  def define_construct(is_mutable, key, value_type, value_construct_args)
+    @current_scope.define(is_mutable, key, value_type, value_type.make(*value_construct_args))
+  end
+
+  def define_existing(is_mutable, key, value_type, value)
+    @current_scope.define(is_mutable, key, value_type, value)
   end
 
   def []=(key, value)
@@ -41,11 +51,13 @@ class ExecScope
   def initialize(parent)
     @parent = parent
     @vars = {}
+    @var_types = {}
     @var_is_mutable = {}
   end
 
-  def define(is_mutable, key, value)
-    @vars[key] = value
+  def define(is_mutable, key, value_type, value)
+    @vars[key] = value_type.coerce(value)
+    @var_types[key] = value_type
     @var_is_mutable[key] = is_mutable
   end
 
@@ -71,13 +83,6 @@ class ExecScope
   end
 end
 
-class ValueTypeBase
-  def evaluate_to_string()
-    p ["x", self]
-    raise "TODO: Implement me in a concrete class!"
-  end
-end
-
 class ValueBase
   def evaluate_to_string()
     p ["x", self]
@@ -87,6 +92,74 @@ class ValueBase
   def evaluate_binop(op, other)
     p ["x", op, self, other]
     raise "TODO: Implement me in a concrete class!"
+  end
+end
+
+# Types are also values
+class ValueTypeBase < ValueBase
+  def ==(other)
+    p ["x", self, other]
+    raise "TODO: Implement me in a concrete class!"
+  end
+
+  def coerce(src)
+    # If the types are the same, use the value as-is.
+    return src if self == src.type
+
+    p ["x", self, src]
+    raise "cannot coerce #{src.type}(#{src.type.evaluate_to_string}) into #{self}(#{self.evaluate_to_string})"
+  end
+
+  def type()
+    VTType.new
+  end
+end
+
+# This is the container for a type!
+class VTType < ValueTypeBase
+  def make(v)
+    v
+  end
+
+  def ==(other)
+    self.class == other.class
+  end
+
+  def evaluate_to_string()
+    "type"
+  end
+end
+
+class VTHostProc < ValueTypeBase
+  def make(fn)
+    VHostProc.new(fn)
+  end
+
+  def ==(other)
+    self.class == other.class
+  end
+
+  def evaluate_to_string()
+    "function{host}(...)"
+  end
+end
+class VHostProc < ValueBase
+  TYPE_INSTANCE = VTHostProc.new
+  attr_reader :fn
+  def initialize(fn)
+    @fn = fn
+  end
+
+  def type()
+    TYPE_INSTANCE
+  end
+
+  def evaluate_to_string()
+    self.to_s
+  end
+
+  def call(*args)
+    @fn.call(*args)
   end
 end
 
@@ -100,6 +173,10 @@ class VTBool < ValueTypeBase
     else
       raise "invalid boolean value #{v}"
     end
+  end
+
+  def ==(other)
+    self.class == other.class
   end
 
   def evaluate_to_string()
@@ -137,6 +214,10 @@ class VTInt < ValueTypeBase
     @signed = signed
   end
 
+  def ==(other)
+    self.class == other.class and @bits == other.bits and @signed == other.signed
+  end
+
   def evaluate_to_string()
     (@signed ? "i" : "u") + @bits.to_s
   end
@@ -144,12 +225,16 @@ class VTInt < ValueTypeBase
   def assert_in_range(value)
     if @signed then
       if value < -(1<<(@bits-1)) then
-        raise "underflow for #{@bits}-bit signed integer: #{value.to_s(16).upcase}"
+        raise "underflow for #{@bits}-bit signed integer: hex #{value.to_s(16).upcase}"
       elsif value >= (1<<(@bits-1))
-        raise "overflow for #{@bits}-bit signed integer: #{value.to_s(16).upcase}"
+        raise "overflow for #{@bits}-bit signed integer: hex #{value.to_s(16).upcase}"
       end
     else
-      raise "TODO: Handle unsigned integers"
+      if value < 0 then
+        raise "underflow for #{@bits}-bit unsigned integer: hex #{value.to_s(16).upcase}"
+      elsif value >= (1<<@bits)
+        raise "overflow for #{@bits}-bit unsigned integer: hex #{value.to_s(16).upcase}"
+      end
     end
   end
 
@@ -165,6 +250,14 @@ class VTInt < ValueTypeBase
     bits = b1
     bits = b2 if b2 > b1
     VTInt.new(bits, signed)
+  end
+
+  def coerce(src)
+    if self.class == src.type.class then
+      make(src.value)
+    else
+      super(src)
+    end
   end
 
   def make(value)
@@ -225,6 +318,10 @@ end
 class VTString < ValueTypeBase
   def make(rstring)
     VString.new(rstring)
+  end
+
+  def ==(other)
+    self.class == other.class
   end
 
   def evaluate_to_string()

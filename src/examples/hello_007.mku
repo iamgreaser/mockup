@@ -1,0 +1,18 @@
+# hello_007: Type names
+
+print(bool);
+print(u8);
+print(i32);
+print(string);
+print(type);
+
+var v: i32 = 3;
+var x: u8 = 3;
+var hello: string = "こんばんは";
+var forbidden: bool = true;
+
+# And just for completeness
+var my_int_type: type = i32;
+var my_number: my_int_type = 123;
+print(my_number);
+
