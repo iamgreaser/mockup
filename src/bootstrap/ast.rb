@@ -326,7 +326,7 @@ class ReturnAST < AST
 
   def evaluate(ctx)
     e = @e != nil ? @e.evaluate(ctx) : nil
-    throw :return, e
+    ctx.return(e)
   end
 end
 

@@ -42,6 +42,10 @@ class ExecContext
   def [](key)
     @current_scope[key]
   end
+
+  def return(e)
+    throw :return, e
+  end
 end
 
 class ExecScope
