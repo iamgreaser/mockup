@@ -1,0 +1,33 @@
+# hello_012: String length and concatenation, and this is basically a tokeniser
+
+const src: string = "function_stat = `function` name=function_name `(` params=param_list `)` return_type=opt_type body=block_stat ;";
+print(src);
+print(src.length);
+{
+  var i: usize = 0;
+  var accum: string = "";
+  while (i < src.length) {
+    const c: char = src[i];
+    i = i + 1;
+    const i: usize = i - 1;
+
+    # Handle whitespace
+    const ws: bool = ((c == 9) or (c == 10) or (c == 13) or (c == 32));
+    if (ws) {
+      # Skip if it's whitespace, emitting a token if we need to
+      if (accum.length != 0) {
+        print(accum);
+        accum = "";
+      }
+    } else {
+      # Accumulate
+      accum = accum + string(c);
+    }
+  }
+
+  # Emit the last token
+  if (accum.length != 0) {
+    print(accum);
+    accum = "";
+  }
+}

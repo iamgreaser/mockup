@@ -216,6 +216,17 @@ class SubscriptAST < AST
   end
 end
 
+class AttribAST < AST
+  def initialize(e, name)
+    @e = e
+    @name = name.n
+  end
+
+  def evaluate(ctx)
+    @e.evaluate(ctx).attrib(@name)
+  end
+end
+
 module BinOp
   Add = "+"
   Sub = "-"
@@ -447,6 +458,7 @@ $parser_to_ast = {
   expr_suffix_func_call: proc {|n| n},
   expr_suffix_subscript: proc {|n| n},
   opt_subscript_span: proc {|n| n[:v]},
+  expr_suffix_attrib: proc {|n| n},
 
   ifelse_expr: proc {|n| IfElseAST.new(n[:v][:test], n[:v][:true_expr], n[:v][:false_expr])},
 }
@@ -459,7 +471,8 @@ $terminal_to_ast = {
 
 $ast_apply_suffix = {
   expr_suffix_func_call: proc {|e, n| FuncCallAST.new(e, (n[:args] or [])) },
-  expr_suffix_subscript: proc {|e, n| SubscriptAST.new(e, n[:base], n[:len] != nil, n[:len] != nil ? n[:len][:len]: nil) }
+  expr_suffix_subscript: proc {|e, n| SubscriptAST.new(e, n[:base], n[:len] != nil, n[:len] != nil ? n[:len][:len]: nil) },
+  expr_suffix_attrib: proc {|e, n| AttribAST.new(e, n) },
 }
 
 $ast_apply_binop = {

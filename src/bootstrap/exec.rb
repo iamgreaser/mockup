@@ -12,8 +12,10 @@ class ExecContext
     self.define_construct(false, "false", VTBool.new, [false])
 
     self.define_construct(false, "bool", VTType.new, [VBool.new(false).type])
-    self.define_construct(false, "u8", VTType.new, [VTInt.new(8, false)])
-    self.define_construct(false, "i32", VTType.new, [VTInt.new(32, true)])
+    self.define_construct(false, "u8", VTType.new, [INT_U8])
+    self.define_construct(false, "i32", VTType.new, [INT_I32])
+    self.define_construct(false, "usize", VTType.new, [INT_USIZE])
+    self.define_construct(false, "char", VTType.new, [CHAR_TYPE])
     self.define_construct(false, "string", VTType.new, [VString.new("").type])
     self.define_construct(false, "type", VTType.new, [VTType.new.type])
 
@@ -103,6 +105,11 @@ class ValueBase
 
   def subscript_slice(base, len)
     p ["x", self, base, len]
+    raise "TODO: Implement me in a concrete class!"
+  end
+
+  def attrib(name)
+    p ["x", self, name]
     raise "TODO: Implement me in a concrete class!"
   end
 end
@@ -273,7 +280,7 @@ class VBool < ValueBase
 
   def evaluate_binop(op, other)
     p ["x", op, self, other]
-    raise "binops not implemented on strings, not sure if they ever will be"
+    raise "binops not implemented on bools, not sure if they ever will be"
   end
 end
 TRUE_BOOL = VBool.new(true)
@@ -381,7 +388,7 @@ class VInt < ValueBase
       in BinOp::Ge
         return @value >= other.value ? TRUE_BOOL : FALSE_BOOL
       else
-        raise "TODO implement binop `#{op}`"
+        raise "unhandled int binop `#{op}`"
       end
       type.make(v)
     else
@@ -390,6 +397,10 @@ class VInt < ValueBase
     end
   end
 end
+INT_I32 = VTInt.new(32, true)
+INT_U8 = VTInt.new(8, false)
+INT_USIZE = VTInt.new(32, false)
+CHAR_TYPE = INT_I32
 
 class VTString < ValueTypeBase
   def make(rstring)
@@ -402,6 +413,17 @@ class VTString < ValueTypeBase
 
   def evaluate_to_string()
     "string"
+  end
+
+  def call(ctx, v)
+    if v.type == self then
+      v
+    elsif v.type.class == CHAR_TYPE.class then
+      self.make(CHAR_TYPE.coerce(v).value.chr)
+    else
+      p ["x", self, v]
+      raise "cannot coerce #{v.type} into string"
+    end
   end
 end
 class VString < ValueBase
@@ -422,8 +444,18 @@ class VString < ValueBase
   end
 
   def evaluate_binop(op, other)
-    p ["x", op, self, other]
-    raise "binops not implemented on strings, not sure if they ever will be"
+    if other.kind_of?(VString) then
+      case op
+      in BinOp::Add
+        v = @rstring + other.rstring
+      else
+        raise "unhandled string binop `#{op}`"
+      end
+      type.make(v)
+    else
+      p ["x", op, self, other]
+      raise "cannot do binop between these types"
+    end
   end
 
   def subscript_element(base)
@@ -442,6 +474,16 @@ class VString < ValueBase
       final = base + len - 1
       raise "final index #{final} out of range" unless len == 0 or (final >= 0 and final < @rstring.length)
       self.type().make(@rstring[base...(base+len)])
+    end
+  end
+
+  def attrib(name)
+    case name
+    in "length"
+      INT_USIZE.make(@rstring.length)
+    else
+      p ["x", self, name]
+      raise "no attribute `#{name}`"
     end
   end
 end
